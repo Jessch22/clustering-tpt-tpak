@@ -32,6 +32,7 @@ temp/
 tmp/
 
 # Shapefile
+/shapefiles/*
 *.shp
 *.shx
 *.dbf
