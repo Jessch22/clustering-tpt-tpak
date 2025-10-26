@@ -99,3 +99,9 @@ penjelasan_dataset = """
     <li><b>TPAK_2024</b>: Tingkat partisipasi angkatan kerja tahun 2024.</li>
     </ul>
 </div>"""
+
+# PENJELASAN
+penjelasan_tpt = "Tingkat Pengangguran Terbuka (TPT) adalah persentase jumlah pengangguran terhadap angkatan kerja."
+penjelasan_tpak = "Tingkat Partisipasi Angkatan Kerja (TPAK) adalah persentase jumlah angkatan kerja terhadap total populasi usia kerja."
+penjelasan_kmeans = "Pilih K-Means jika ingin mengelompokkan wilayah berdasarkan jumlah cluster yang telah ditentukan."
+penjelasan_dbscan = "Pilih DBSCAN jika ingin menemukan cluster dengan bentuk bebas dan mengidentifikasi outlier."
