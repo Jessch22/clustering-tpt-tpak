@@ -30,3 +30,13 @@ Thumbs.db
 output/
 temp/
 tmp/
+
+# Shapefile
+*.shp
+*.shx
+*.dbf
+*.prj
+*.cpg
+*.sbn
+*.sbx
+*.xml
