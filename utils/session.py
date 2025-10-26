@@ -22,6 +22,6 @@ def get_tpak_checked():
     return st.session_state.get('tpak_checked', False)
 
 def reset_clustering_state():
-    for key in ['var', 'tahun_pilihan', 'tpt_checked', 'tpak_checked', 'metode_pilihan', 'params']:
+    for key in ['var', 'tahun_pilihan', 'tpt_checked', 'tpak_checked', 'metode_pilihan', 'params', 'hasil_data', 'scores', 'gdf_hasil', 'data_for_clustering', 'map_object', 'cluster_color_map']:
         if key in st.session_state:
-            del st.session_state[key]
+            st.session_state[key] = None

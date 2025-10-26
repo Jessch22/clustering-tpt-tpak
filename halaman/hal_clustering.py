@@ -132,21 +132,23 @@ def render_clustering_page():
       st.dataframe(st.session_state['hasil_data'], use_container_width=True)
       col_dl_1, col_dl_2 = st.columns([1,1])
       with col_dl_1: # Tombol Download
-          pdf_bytes = None; generate_pdf = False
-          if st.session_state.get('hasil_data') is not None:
-              generate_pdf = True
-          try: pdf_bytes = generate_pdf_report()
-          except Exception as e_pdf: st.error(f"Gagal mempersiapkan data PDF: {e_pdf}"); pdf_bytes = None
-      if generate_pdf and pdf_bytes:
-          st.download_button( label="📄 Download PDF Report", data=pdf_bytes,
-              file_name=f"clustering_report_{st.session_state.get('metode_pilihan','hasil')}_{time.strftime('%Y%m%d_%H%M%S')}.pdf",
-              mime="application/pdf", type="primary", use_container_width=True)
-      else: st.button("📄 Download PDF Report", disabled=True, help="Jalankan analisis...", use_container_width=True)
+        pdf_bytes = None; generate_pdf = False
+        if st.session_state.get('hasil_data') is not None:
+          generate_pdf = True
+        try: pdf_bytes = generate_pdf_report()
+        except Exception as e_pdf: st.error(f"Gagal mempersiapkan data PDF: {e_pdf}"); pdf_bytes = None
+        if generate_pdf and pdf_bytes:
+          st.download_button(
+            label="📄 Download PDF Report", data=pdf_bytes,
+            file_name=f"clustering_report_{st.session_state.get('metode_pilihan','hasil')}_{time.strftime('%Y%m%d_%H%M%S')}.pdf",
+            mime="application/pdf", type="primary", use_container_width=True)
+        else:
+          st.button("📄 Download PDF Report", disabled=True, help="Jalankan analisis...", use_container_width=True)
       with col_dl_2: # Tombol Clear
           if st.button("❌ Clear Current Result", use_container_width=True):
-              keys_to_clear = ['hasil_data', 'scores', 'data_for_clustering', 'gdf_hasil', 'map_object', 'var', 'params']
-              for key in keys_to_clear:
-                  if key in st.session_state: st.session_state[key] = None
-              st.success("Hasil saat ini dihapus.")
-              st.rerun()
+            keys_to_clear = ['hasil_data', 'scores', 'data_for_clustering', 'gdf_hasil', 'map_object', 'var', 'params']
+            for key in keys_to_clear:
+              if key in st.session_state: st.session_state[key] = None
+            st.success("Hasil saat ini dihapus.")
+            st.rerun()
   else: st.info("Belum ada hasil clustering...")

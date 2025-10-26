@@ -14,7 +14,8 @@ st.set_page_config(
 )
 
 #* INISIALISASI APLIKASI ==========
-# initialize_session_state()
+if 'selected_page_index' not in st.session_state:
+  st.session_state['selected_page_index'] = 0
 
 #* NAVBAR UTAMA ==========
 selected = option_menu(
@@ -45,8 +46,15 @@ selected = option_menu(
 
 #* ROUTING HALAMAN ==========
 if selected == "Home":
-    render_home_page()
+    st.session_state['selected_page_index'] = 0
 elif selected == "Dataset":
-    render_dataset_page()
+    st.session_state['selected_page_index'] = 1
 elif selected == "Clustering":
+    st.session_state['selected_page_index'] = 2
+
+if st.session_state['selected_page_index'] == 0:
+    render_home_page()
+elif st.session_state['selected_page_index'] == 1:
+    render_dataset_page()
+elif st.session_state['selected_page_index'] == 2:
     render_clustering_page()

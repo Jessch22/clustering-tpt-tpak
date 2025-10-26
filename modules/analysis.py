@@ -143,9 +143,8 @@ def run_analysis(var, tahun_pilihan, metode_terpilih, params, path, sheet):
                     st.session_state['map_object'] = None
                     
                     try:
-                        file_id = "1PmftUhdE8eXgexmAUd01BxZj8Mm6S0Jf"
                         # Muat shapefile batas kabupaten/kota
-                        shapefile_path = f'https://drive.google.com/uc?export=download&id={file_id}'
+                        shapefile_path = 'shapefiles/LapakGIS_Batas_Kabupaten_2024.shp'
                         gdf = gpd.read_file(shapefile_path)
                         # Penyederhanaan geometri
                         gdf['geometry'] = gdf['geometry'].simplify(tolerance=0.01, preserve_topology=True)
