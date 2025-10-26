@@ -10,30 +10,48 @@ import seaborn as sns
 import matplotlib.colors as mcolors
 
 def get_cluster_color_map(cluster_ids):
-    """Mendapatkan peta warna untuk cluster berdasarkan cluster_ids."""
+    """Mendapatkan peta warna untuk cluster berdasarkan cluster_ids.
+
+    - cluster_ids: iterable berisi id cluster (bisa int atau str). Noise harus diberi id -1.
+    - Warna abu-abu (#D3D3D3) DILARANG untuk cluster valid; hanya dipakai untuk noise (-1).
+    - Fungsi mengembalikan dict: {cluster_id: hexcolor, ..., -1: '#D3D3D3'}.
+    """
     color_map = {}
-    
+
     # Filter cluster_ids valid (bukan NaN atau -1)
-    valid_cluster_ids = sorted([int(c) for c in cluster_ids if pd.notna(c) and c != -1])
+    valid_cluster_ids = sorted([c for c in cluster_ids if pd.notna(c) and c != -1], key=lambda x: (int(x) if str(x).lstrip('-').isdigit() else str(x)))
     n_colors = len(valid_cluster_ids)
+
+    # Ambil colormap 'tab10' dari Matplotlib sebagai preferensi
     try:
-        # Ambil colormap 'tab10' dari Matplotlib untuk konsistensi warna
         cmap = plt.colormaps.get('tab10')
-        # Assign warna ke setiap cluster valid dari colormap tersebut
-        # Langkah: normalisasi indeks warna ke [0, 1], ambil warna RGBA, konversi ke HEX
-        for i, cluster_id in enumerate(valid_cluster_ids):
-            norm_index = float(i) / (n_colors -1) if n_colors > 1 else 0.5
-            rgba_color = cmap(norm_index)
-            color_map[cluster_id] = mcolors.to_hex(rgba_color)
+        if n_colors > 0:
+            for i, cluster_id in enumerate(valid_cluster_ids):
+                # normalisasi indeks warna ke [0,1]
+                norm_index = float(i) / (n_colors - 1) if n_colors > 1 else 0.5
+                rgba_color = cmap(norm_index)
+                hex_color = mcolors.to_hex(rgba_color)
+                # Pastikan warna tidak sama dengan gray noise '#D3D3D3'
+                if hex_color.lower() in ('#d3d3d3', '#d3d3d'):  # defensif check
+                    # fallback ke warna lain dari plotly
+                    hex_color = px.colors.qualitative.Plotly[i % len(px.colors.qualitative.Plotly)]
+                color_map[cluster_id] = hex_color
     except Exception as e:
-        st.warning(f"Gagal get cmap 'tab10' ({e}), fallback ke Plotly.")
+        st.warning(f"Gagal mendapatkan colormap Matplotlib ('tab10') ({e}), fallback ke Plotly.")
         plotly_colors = px.colors.qualitative.Plotly
         for i, cluster_id in enumerate(valid_cluster_ids):
             color_map[cluster_id] = plotly_colors[i % len(plotly_colors)]
-            
-    # Warna untuk noise (-1) dan NaN
+
+    # Pastikan semua cluster valid memiliki warna (fallback bila ada edge cases)
+    if valid_cluster_ids:
+        fallback_palette = px.colors.qualitative.Plotly
+        for i, cluster_id in enumerate(valid_cluster_ids):
+            if cluster_id not in color_map or not color_map[cluster_id]:
+                color_map[cluster_id] = fallback_palette[i % len(fallback_palette)]
+
+    # Warna khusus untuk noise (-1) — harus abu-abu
     color_map[-1] = '#D3D3D3'
-    
+
     return color_map
 
 def render_metrics_and_silhouette(scores, hasil_data, data_for_clustering):
@@ -66,7 +84,7 @@ def render_metrics_and_silhouette(scores, hasil_data, data_for_clustering):
     # Panggil fungsi render_silhouette_plot (Silhouette Plot)
     render_silhouette_plot(data_for_clustering, hasil_data, scores)
 
-def create_folium_map(gdf_merged, key_column='WADMKK'):
+def create_folium_map(gdf_merged, key_column='WADMKK', tooltip_name_col: str = 'display_name', tooltip_prov_col: str = 'prov'):
     """
     Membuat peta interaktif Folium berdasarkan GeoDataFrame, dengan tooltip dan legenda
     """
@@ -75,47 +93,65 @@ def create_folium_map(gdf_merged, key_column='WADMKK'):
     # Jika gdf_merged tidak valid, kembalikan None
     if gdf_merged is None or gdf_merged.empty or 'geometry' not in gdf_merged.columns:
         st.warning("Data geospasial tidak valid untuk membuat peta."); return None
-    # Jika kolom 'Cluster' atau key_column tidak ada, kembalikan None
     if 'Cluster' not in gdf_merged.columns:
         st.warning("Kolom 'Cluster' tidak ditemukan di data geospasial."); return None
-    # Jika key_column tidak ada, coba fallback ke 'kab_kota'
-    if key_column not in gdf_merged.columns:
-        st.warning(f"Kolom kunci '{key_column}' tidak ditemukan."); key_column = 'kab_kota';
-        if key_column not in gdf_merged.columns: st.error("Tidak dapat menemukan kolom nama wilayah."); return None
 
-    # Default fields/aliases untuk tooltip
-    fields_for_tooltip = [key_column, 'Cluster']
-    aliases_for_tooltip = ['Wilayah:', 'Cluster:']
-    # Cek jika 'prov' ada dan update
-    if 'prov' in gdf_merged.columns:
-        # Tooltip dengan provinsi
-        fields_for_tooltip = ['prov', key_column, 'Cluster']
-        # Aliases
-        aliases_for_tooltip = ['Provinsi:', 'Wilayah:', 'Cluster:']
-    else:
-        st.warning("Kolom 'prov' tidak ditemukan di data gabungan untuk tooltip.")
+    # Pastikan kolom tooltip ada; jika tidak, buat fallback yang readable
+    if tooltip_name_col not in gdf_merged.columns:
+        st.warning(f"Kolom tooltip nama ('{tooltip_name_col}') tidak ditemukan. Menggunakan kolom '{key_column}' sebagai pengganti.")
+        gdf_merged[tooltip_name_col] = gdf_merged.get(key_column, "").astype(str)
+    if tooltip_prov_col not in gdf_merged.columns:
+        gdf_merged[tooltip_prov_col] = gdf_merged.get('prov', "").astype(str)
 
     try:
         # Koordinat pusat Indonesia
         map_center = [-2.5489, 118.0149]; zoom_level = 5
-        # Buat peta Folium
         m = folium.Map(location=map_center, zoom_start=zoom_level, tiles="cartodbpositron")
 
-        # Mengurutkan cluster yang valid untuk konsistensi warna
-        clusters_valid = sorted([c for c in gdf_merged['Cluster'].unique() if pd.notna(c) and c != -1])
-        # Memanggil fungsi get_cluster_color_map untuk mendapatkan peta warna
-        color_dict = get_cluster_color_map(clusters_valid)
-        # Fungsi untuk mendapatkan warna berdasarkan cluster, default ke abu-abu jika tidak ditemukan
-        get_color = lambda cluster_id: color_dict.get(cluster_id, '#808080')
-        
-        # Buat GeoJson dengan style dan tooltip
+        # Menentukan warna cluster
+        unique_clusters_raw = gdf_merged['Cluster'].unique()
+        clusters_valid = sorted([c for c in unique_clusters_raw if pd.notna(c) and c != -1],
+                                key=lambda x: (int(x) if str(x).lstrip('-').isdigit() else str(x)))
+        color_dict = get_cluster_color_map(unique_clusters_raw)
+
+        # Fungsi untuk mendapatkan warna berdasarkan cluster
+        def _get_color_for_feature(cluster_id):
+            # cluster_id bisa berupa int, float, atau string; periksa beberapa bentuk kunci
+            try:
+                # Jika null/NaN -> treat as NA -> use noise color
+                if cluster_id is None or (isinstance(cluster_id, float) and np.isnan(cluster_id)):
+                    return color_dict.get(-1, '#D3D3D3')
+                # Coba lookup langsung
+                if cluster_id in color_dict:
+                    return color_dict[cluster_id]
+                # Coba convert ke int jika memungkinkan
+                try:
+                    cid_int = int(cluster_id)
+                    if cid_int in color_dict:
+                        return color_dict[cid_int]
+                except Exception:
+                    pass
+                # Coba string form
+                cid_str = str(cluster_id)
+                if cid_str in color_dict:
+                    return color_dict[cid_str]
+            except Exception:
+                pass
+            # Fallback: jangan pakai abu-abu untuk cluster; gunakan hitam atau warna primer dari Plotly
+            return '#000000'
+
+        # Tooltip fields and aliases
+        fields_for_tooltip = [tooltip_prov_col, tooltip_name_col, 'Cluster']
+        aliases_for_tooltip = ['Provinsi:', 'Wilayah:', 'Cluster:']
+
         geojson = folium.GeoJson(
             gdf_merged,
             style_function=lambda feature: {
-                'fillColor': get_color(feature['properties'].get('Cluster')), # Gunakan get_color
-                'color': 'black', 'weight': 0.5, 'fillOpacity': 0.7,
+                'fillColor': _get_color_for_feature(feature['properties'].get('Cluster')),
+                'color': 'black',
+                'weight': 0.5,
+                'fillOpacity': 0.7,
             },
-            # Highlight saat hover
             highlight_function=lambda x: {'weight': 2, 'color': 'red'},
             tooltip=folium.features.GeoJsonTooltip(
                 fields=fields_for_tooltip, aliases=aliases_for_tooltip,
@@ -129,34 +165,26 @@ def create_folium_map(gdf_merged, key_column='WADMKK'):
         )
         geojson.add_to(m)
 
-        # Buat legenda kustom
-        # Jika ada cluster valid, buat legend
+        # Buat legend kustom: hanya buat entry untuk cluster valid + noise
         if clusters_valid:
             legend_html = '''
-                <div style="position:fixed; bottom:50px; right:50px; width:150px; height:auto; 
+                <div style="position:fixed; bottom:50px; right:50px; width:170px; height:auto; 
                 border:2px solid grey; z-index:9999; font-size:12px; background-color:white; 
-                padding:10px; opacity:0.9;"><b>Legenda Cluster</b><br>
+                padding:10px; opacity:0.95;"><b>Legenda Cluster</b><br>
             '''
-            # Dalam setiap cluster valid, tambahkan ke legend
             for cluster_id in clusters_valid:
-                # Dapatkan warna dari dict, black jika tidak ditemukan
-                color = color_dict.get(cluster_id, 'black')
-                # Tambah entri legenda untuk cluster
-                legend_html += f'&nbsp; <i style="background:{color}; width:15px; height:15px; display:inline-block; margin-right:5px; border: 1px solid grey;"></i> Cluster {int(cluster_id)}<br>'
-            # Cek jika ada noise (-1) atau NaN
-            has_noise = -1 in gdf_merged['Cluster'].unique()
-            has_nan = gdf_merged['Cluster'].isnull().any()
-            
-            # Jika ada noise/NaN, tambahkan entri legenda untuk noise/NaN
-            if has_noise or has_nan:
-                color_na = color_dict.get(-1, 'lightgrey')
+                col = color_dict.get(cluster_id, '#000000')
+                legend_html += f'&nbsp; <i style="background:{col}; width:15px; height:15px; display:inline-block; margin-right:5px; border: 1px solid grey;"></i> Cluster {cluster_id}<br>'
+            # Noise entry
+            has_noise = (-1 in unique_clusters_raw) or (gdf_merged['Cluster'].isnull().any())
+            if has_noise:
+                color_na = color_dict.get(-1, '#D3D3D3')
                 legend_html += f'&nbsp; <i style="background:{color_na}; width:15px; height:15px; display:inline-block; margin-right:5px; border: 1px solid grey;"></i> Noise / N/A<br>'
             legend_html += '</div>'
             m.get_root().html.add_child(folium.Element(legend_html))
-            
+
         return m
     except Exception as e:
-        # DEBUG
         st.error(f"Gagal membuat peta Folium: {e}")
         return None
 
