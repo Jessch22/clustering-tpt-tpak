@@ -15,7 +15,7 @@ st.set_page_config(
 
 #* INISIALISASI APLIKASI ==========
 if 'selected_page_index' not in st.session_state:
-  st.session_state['selected_page_index'] = 0
+    st.session_state['selected_page_index'] = 0
 
 #* NAVBAR UTAMA ==========
 selected = option_menu(
