@@ -108,7 +108,7 @@ def run_analysis(var, tahun_pilihan, metode_terpilih, params, path, sheet):
                 st.session_state['map_object'] = None
 
                 try:
-                    geojson_path = r'shapefiles/38 Provinsi Indonesia - Kabupaten.json'  # <-- your GeoJSON path
+                    geojson_path = r'geojson/38 Provinsi Indonesia - Kabupaten.json'
                     if not os.path.exists(geojson_path):
                         raise FileNotFoundError(f"GeoJSON tidak ditemukan. Letakkan file GeoJSON di: {geojson_path}")
 
