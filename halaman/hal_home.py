@@ -25,14 +25,14 @@ def render_home_page():
     
     st.write("")
 
-    # Guide Book Section
+    # Manual Book Section
     st.markdown("""
     <div style="background-color:#E0F7FA; padding:20px; border-radius:10px; text-align:center; box-shadow: 2px 2px 5px #aaaaaa;">
-      <h3>📖 Guide Book</h3>
+      <h3>📖 Manual Book</h3>
       <p>Apabila membutuhkan panduan lebih lanjut, klik tombol dibawah.</p>
       <a href="https://link-ke-guidebook.com" target="_blank">
         <button style="background-color:#00796B; color:white; padding:10px 20px; border:none; border-radius:5px; cursor:pointer;">
-          Buka Guide Book
+          Buka Manual Book
         </button>
       </a>
     </div>
