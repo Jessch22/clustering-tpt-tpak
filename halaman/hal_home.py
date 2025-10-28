@@ -13,11 +13,6 @@ def render_home_page():
     
     st.divider()
     
-    # Cara penggunaan singkat
-    st.subheader("CARA PENGGUNAAN SINGKAT")
-    st.markdown(cara_penggunaan, unsafe_allow_html=True)
-    st.write("")
-    
     col_btn1, col_btn2 = st.columns(2)
     with col_btn1:
       if st.button("📊 Lihat Dataset", use_container_width=True):
@@ -43,6 +38,11 @@ def render_home_page():
     </div>
     """, unsafe_allow_html=True)
     
+    st.write("")
+    
+    # Cara penggunaan singkat
+    st.subheader("CARA PENGGUNAAN SINGKAT")
+    st.markdown(cara_penggunaan, unsafe_allow_html=True)
     st.write("")
     
     # Latar Belakang

@@ -12,16 +12,14 @@ from modules.plot import (
     render_boxplot_to_buffer
 )
 
+# ====================================================
+# === CUSTOM PDF CLASS
+# ====================================================
 class PDF(FPDF):
-    """Kelas FPDF kustom untuk header dan footer."""
     def header(self):
-        self.set_font('Arial', 'B', 10)
-        self.multi_cell(0, 5, 'Laporan Hasil Clustering - Sistem Pemetaan Wilayah Berdasarkan Tingkat Pengangguran Terbuka', 0, 'C')
-        self.multi_cell(0, 5, 'dan Tingkat Partisipasi Angkatan Kerja di Indonesia dengan K-Means dan DBSCAN', 0, 'C')
-        self.ln(5)
-        self.set_font('Arial', 'I', 9)
-        self.cell(0, 5, f'Tanggal Pembuatan: {time.strftime("%Y-%m-%d %H:%M:%S")}', 0, 1, 'C')
-        self.ln(8)
+        self.set_font('Arial', 'B', 14)
+        self.cell(0, 10, "Laporan Analisis Clustering TPT & TPAK", 0, 1, 'C')
+        self.ln(3)
 
     def footer(self):
         self.set_y(-15)
@@ -29,188 +27,470 @@ class PDF(FPDF):
         self.cell(0, 10, f'Halaman {self.page_no()}/{{nb}}', 0, 0, 'C')
 
     def chapter_title(self, title):
-        self.set_font('Arial', 'B', 11)
-        self.cell(0, 6, title, 0, 1, 'L')
-        self.ln(4)
+        self.set_font('Arial', 'B', 13)
+        self.set_fill_color(200, 220, 255)
+        self.cell(0, 10, title, 0, 1, 'L', 1)
+        self.ln(3)
 
-    def chapter_body(self, body):
-        self.set_font('Arial', '', 10)
-        self.multi_cell(0, 5, body)
+    def chapter_body(self, text):
+        self.set_font('Arial', '', 11)
+        self.multi_cell(0, 6, text)
         self.ln()
 
-    def add_dataframe_to_pdf(self, df, max_rows=100, cols_to_show=None):
-        """Menambahkan DataFrame ke PDF sebagai tabel (versi sederhana)."""
+    def add_dataframe_to_pdf(self, df, max_rows=50, cols_to_show=None):
+        """Menampilkan tabel kecil hasil clustering di PDF"""
         if df is None or df.empty:
-            self.chapter_body("Data tabel tidak tersedia.")
+            self.set_font('Arial', 'I', 9)
+            self.multi_cell(0, 6, "(Tidak ada data untuk ditampilkan)")
             return
 
-        # Pilih kolom yang akan ditampilkan
+        df_to_show = df.head(max_rows)
         if cols_to_show:
-            # Jika daftar kolom diberikan, gunakan itu (filter yg ada di df)
-            df_display = df[[col for col in cols_to_show if col in df.columns]].copy()
+            df_to_show = df_to_show[cols_to_show]
+
+        self.set_font('Courier', '', 7)
+        table_str = df_to_show.to_string(index=False)
+        self.multi_cell(0, 4, table_str)
+        self.ln(5)
+
+
+# ====================================================
+# === UTILITAS: KONVERSI PLOT KE BUFFER UNTUK PDF
+# ====================================================
+def render_static_map_to_buffer(gdf_hasil):
+    """Render GeoDataFrame ke buffer gambar untuk PDF"""
+    try:
+        fig, ax = plt.subplots(figsize=(14, 10))
+        
+        # Filter hanya data yang memiliki cluster (bukan NaN)
+        gdf_plot = gdf_hasil[gdf_hasil['Cluster'].notna()].copy()
+        
+        # Plot peta tanpa legend built-in
+        gdf_plot.plot(
+            column='Cluster', 
+            legend=False,  # Matikan legend bawaan
+            cmap='tab20', 
+            ax=ax, 
+            edgecolor='black', 
+            linewidth=0.5
+        )
+        
+        # Plot wilayah tanpa data dengan warna abu-abu
+        gdf_no_data = gdf_hasil[gdf_hasil['Cluster'].isna()]
+        if not gdf_no_data.empty:
+            gdf_no_data.plot(
+                ax=ax,
+                color='#D3D3D3',
+                edgecolor='grey',
+                linewidth=0.5
+            )
+        
+        ax.set_title("Peta Persebaran Cluster Wilayah", fontsize=16, fontweight='bold', pad=20)
+        ax.axis('off')
+        
+        # Buat legend manual yang mirip dengan folium
+        from matplotlib.patches import Rectangle
+        import matplotlib.cm as cm
+        
+        unique_clusters = sorted(gdf_plot['Cluster'].unique())
+        n_clusters = len(unique_clusters)
+        
+        # Warna dari colormap tab20
+        cmap = cm.get_cmap('tab20', n_clusters)
+        
+        # Buat elemen legend dengan kotak kecil seperti di folium
+        legend_elements = []
+        legend_labels = []
+        
+        for i, cluster in enumerate(unique_clusters):
+            color = cmap(i / n_clusters) if n_clusters > 1 else cmap(0)
+            legend_elements.append(Rectangle((0, 0), 1, 1, fc=color, ec='grey', linewidth=1))
+            legend_labels.append(f'Cluster {int(cluster)}')
+        
+        # Tambahkan legend untuk wilayah tanpa data jika ada
+        if not gdf_no_data.empty:
+            legend_elements.append(Rectangle((0, 0), 1, 1, fc='#D3D3D3', ec='grey', linewidth=1))
+            legend_labels.append('Noise / N/A')
+        
+        # Posisikan legend dengan style yang mirip folium
+        legend = ax.legend(
+            legend_elements,
+            legend_labels,
+            title='Legenda Cluster',
+            loc='upper right',
+            fontsize=11,
+            frameon=True,
+            fancybox=False,
+            shadow=False,
+            edgecolor='grey',
+            facecolor='white',
+            framealpha=0.95,
+            borderpad=1,
+            labelspacing=0.8,
+            handlelength=1.5,
+            handleheight=1.5
+        )
+        
+        # Style judul legend
+        legend.get_title().set_fontsize(12)
+        legend.get_title().set_fontweight('bold')
+        
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png', bbox_inches='tight', dpi=150)
+        plt.close(fig)
+        buf.seek(0)
+        return buf
+    except Exception as e:
+        st.error(f"Gagal render peta statis: {e}")
+        import traceback
+        st.error(traceback.format_exc())
+        return None
+
+
+def render_silhouette_to_buffer(hasil_data, data_for_clustering):
+    """Render silhouette plot seperti di web"""
+    try:
+        from sklearn.metrics import silhouette_samples
+        import numpy as np
+        
+        if data_for_clustering is None or hasil_data is None or 'Cluster' not in hasil_data.columns:
+            return None
+        
+        # Hitung silhouette samples
+        silhouette_vals = silhouette_samples(data_for_clustering, hasil_data['Cluster'])
+        avg_score = silhouette_vals.mean()
+        
+        fig, ax = plt.subplots(figsize=(10, 7))
+        
+        y_lower = 10
+        unique_clusters = sorted(hasil_data['Cluster'].unique())
+        
+        for i, cluster in enumerate(unique_clusters):
+            cluster_silhouette_vals = silhouette_vals[hasil_data['Cluster'] == cluster]
+            cluster_silhouette_vals.sort()
+            
+            size_cluster = cluster_silhouette_vals.shape[0]
+            y_upper = y_lower + size_cluster
+            
+            color = plt.cm.tab10(i / len(unique_clusters))
+            ax.fill_betweenx(np.arange(y_lower, y_upper), 0, cluster_silhouette_vals,
+                            facecolor=color, edgecolor=color, alpha=0.7)
+            
+            ax.text(-0.05, y_lower + 0.5 * size_cluster, f'C{cluster}', fontsize=10, fontweight='bold')
+            y_lower = y_upper + 10
+        
+        ax.set_title("Silhouette Plot", fontsize=14, fontweight='bold', pad=15)
+        ax.set_xlabel("Silhouette Coefficient", fontsize=12)
+        ax.set_ylabel("Cluster", fontsize=12)
+        ax.axvline(x=avg_score, color="red", linestyle="--", linewidth=2, 
+                   label=f'Rata-rata: {avg_score:.3f}')
+        ax.legend(fontsize=10)
+        ax.grid(True, alpha=0.3)
+        
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png', bbox_inches='tight', dpi=120)
+        plt.close(fig)
+        buf.seek(0)
+        return buf
+    except Exception as e:
+        st.error(f"Gagal render silhouette plot: {e}")
+        import traceback
+        st.error(traceback.format_exc())
+        return None
+
+
+def render_boxplot_to_buffer(hasil_data, data_for_clustering):
+    """Render boxplot seperti di web"""
+    try:
+        if data_for_clustering is None or hasil_data is None:
+            return None
+            
+        n_cols = len(data_for_clustering.columns)
+        fig, axes = plt.subplots(1, n_cols, figsize=(6 * n_cols, 6))
+        
+        if n_cols == 1:
+            axes = [axes]
+        
+        for idx, col in enumerate(data_for_clustering.columns):
+            cluster_data = []
+            cluster_labels = []
+            
+            for cluster in sorted(hasil_data['Cluster'].unique()):
+                cluster_values = hasil_data[hasil_data['Cluster'] == cluster][col].values
+                cluster_data.append(cluster_values)
+                cluster_labels.append(f'C{cluster}')
+            
+            bp = axes[idx].boxplot(cluster_data, labels=cluster_labels, patch_artist=True)
+            
+            # Warna boxplot
+            colors = plt.cm.tab10(range(len(cluster_data)))
+            for patch, color in zip(bp['boxes'], colors):
+                patch.set_facecolor(color)
+                patch.set_alpha(0.7)
+            
+            axes[idx].set_title(f'{col}', fontsize=13, fontweight='bold')
+            axes[idx].set_xlabel('Cluster', fontsize=11)
+            axes[idx].set_ylabel('Nilai', fontsize=11)
+            axes[idx].grid(True, alpha=0.3, axis='y')
+        
+        plt.suptitle("Distribusi Nilai per Cluster (Box Plot)", fontsize=15, fontweight='bold', y=1.02)
+        plt.tight_layout()
+        
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png', bbox_inches='tight', dpi=120)
+        plt.close(fig)
+        buf.seek(0)
+        return buf
+    except Exception as e:
+        st.error(f"Gagal render boxplot: {e}")
+        import traceback
+        st.error(traceback.format_exc())
+        return None
+
+
+def render_scatter_to_buffer(hasil_data, data_for_clustering):
+    """Render scatter plot seperti di web"""
+    try:
+        if data_for_clustering is None or hasil_data is None:
+            return None
+            
+        n_cols = len(data_for_clustering.columns)
+        
+        if n_cols >= 2:
+            # Scatter matrix jika ada 2+ kolom - ukuran dikurangi agar muat
+            fig_size = min(10, 3.5 * n_cols)  # Batasi ukuran maksimal
+            fig, axes = plt.subplots(n_cols, n_cols, figsize=(fig_size, fig_size))
+            
+            for i in range(n_cols):
+                for j in range(n_cols):
+                    ax = axes[i, j] if n_cols > 1 else axes
+                    
+                    if i == j:
+                        # Histogram di diagonal
+                        for cluster in sorted(hasil_data['Cluster'].unique()):
+                            cluster_data = hasil_data[hasil_data['Cluster'] == cluster][data_for_clustering.columns[i]]
+                            ax.hist(cluster_data, alpha=0.5, label=f'C{cluster}', bins=15)
+                        ax.set_ylabel('Frekuensi', fontsize=8)
+                        if i == 0:
+                            ax.legend(loc='upper right', fontsize=7)
+                    else:
+                        # Scatter plot
+                        scatter = ax.scatter(
+                            hasil_data[data_for_clustering.columns[j]],
+                            hasil_data[data_for_clustering.columns[i]],
+                            c=hasil_data['Cluster'],
+                            cmap='tab10',
+                            alpha=0.6,
+                            s=15,
+                            edgecolors='black',
+                            linewidth=0.3
+                        )
+                    
+                    # Label axes dengan font lebih kecil
+                    if j == 0:
+                        ax.set_ylabel(data_for_clustering.columns[i], fontsize=8)
+                    else:
+                        ax.set_ylabel('')
+                    
+                    if i == n_cols - 1:
+                        ax.set_xlabel(data_for_clustering.columns[j], fontsize=8)
+                    else:
+                        ax.set_xlabel('')
+                    
+                    ax.grid(True, alpha=0.3)
+                    ax.tick_params(labelsize=7)
+            
+            plt.suptitle("Visualisasi Scatter Plot Matrix", fontsize=12, fontweight='bold', y=0.995)
+            plt.tight_layout()
+            
         else:
-            # Jika tidak ditentukan, ambil kolom default + SEMUA kolom data
-            default_cols = ['ID', 'prov', 'kab_kota', 'Cluster']
-            if 'Point Type' in df.columns: default_cols.append('Point Type')
-            # Ambil SEMUA kolom yang formatnya mirip data (misal: ada '_')
-            data_cols = [col for col in df.columns if col not in default_cols and '_' in col]
-            # Gabungkan: default dulu, baru semua kolom data
-            cols_to_show_auto = default_cols + sorted(data_cols) # Urutkan kolom data berdasarkan nama
-            # Filter lagi untuk memastikan semua kolom ada di df asli
-            df_display = df[[col for col in cols_to_show_auto if col in df.columns]].copy()
-        if df_display.empty:
-            self.chapter_body("Tidak ada kolom yang valid untuk ditampilkan dalam tabel.")
-            return
-
-        header_font_size = 7
-        data_font_size = 6
-        row_height = 5
-
-        self.set_font('Arial', 'B', header_font_size)
-        page_width = self.w - 2 * self.l_margin
-        num_cols = len(df_display.columns)
-        col_width = page_width / num_cols if num_cols > 0 else 10
-
-        # --- Render Header ---
-        for col_name in df_display.columns:
-            self.cell(col_width, row_height + 1, col_name, border=1, align='C')
-        self.ln(row_height + 1)
-
-        # --- Render Data ---
-        self.set_font('Arial', '', data_font_size)
-        for index, row in df_display.head(max_rows).iterrows():
-            y_before_row = self.get_y()
-            if y_before_row > (self.h - self.b_margin - (row_height * 2)):
-                self.add_page()
-                self.set_font('Arial', 'B', header_font_size)
-                for col_name in df_display.columns: self.cell(col_width, row_height + 1, col_name, border=1, align='C')
-                self.ln(row_height + 1)
-                self.set_font('Arial', '', data_font_size)
-
-            for col_name in df_display.columns:
-                text = str(row[col_name]); max_chars_per_cell = int(col_width / 1.5)
-                if len(text) > max_chars_per_cell: text = text[:max_chars_per_cell - 3] + "..."
-                self.cell(col_width, row_height, text, border=1, align='L')
-            self.ln(row_height)
-
-        if len(df) > max_rows:
-            self.set_font('Arial', 'I', 7)
-            self.cell(0, 6, f"... (ditampilkan {max_rows} dari {len(df)} baris data lengkap) ...", 0, 1)
+            # Jika hanya 1 kolom, buat histogram
+            fig, ax = plt.subplots(figsize=(10, 7))
+            for cluster in sorted(hasil_data['Cluster'].unique()):
+                cluster_data = hasil_data[hasil_data['Cluster'] == cluster][data_for_clustering.columns[0]]
+                ax.hist(cluster_data, alpha=0.5, label=f'Cluster {cluster}', bins=20)
+            ax.set_xlabel(data_for_clustering.columns[0], fontsize=12)
+            ax.set_ylabel('Frekuensi', fontsize=12)
+            ax.set_title('Distribusi Data per Cluster', fontsize=14, fontweight='bold')
+            ax.legend(fontsize=10)
+            ax.grid(True, alpha=0.3)
+            
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png', bbox_inches='tight', dpi=100)
+        plt.close(fig)
+        buf.seek(0)
+        return buf
+    except Exception as e:
+        st.error(f"Gagal render scatter plot: {e}")
+        import traceback
+        st.error(traceback.format_exc())
+        return None
 
 
+# ====================================================
+# === FUNGSI UTAMA: GENERATE PDF REPORT
+# ====================================================
 def generate_pdf_report():
-    """Mengambil data dari session_state dan membuat laporan PDF dalam bentuk bytes."""
+    """Membuat laporan PDF komprehensif berdasarkan hasil analisis di session_state."""
 
-    var = st.session_state.get('var', 'N/A')
-    tahun_pilihan = st.session_state.get('tahun_pilihan', ('N/A','N/A'))
-    metode = st.session_state.get('metode_pilihan', 'N/A')
-    params_dict = st.session_state.get('params', {})
-    scores = st.session_state.get('scores')
-    hasil_data = st.session_state.get('hasil_data')
-    data_for_clustering = st.session_state.get('data_for_clustering')
-    gdf_hasil = st.session_state.get('gdf_hasil')
+    var = st.session_state.get("var", "N/A")
+    tahun_pilihan = st.session_state.get("tahun_pilihan", ("N/A", "N/A"))
+    metode = st.session_state.get("metode_pilihan", "N/A")
+    params_dict = st.session_state.get("params", {})
+    scores = st.session_state.get("scores")
+    hasil_data = st.session_state.get("hasil_data")
+    data_for_clustering = st.session_state.get("data_for_clustering")
+    gdf_hasil = st.session_state.get("gdf_hasil")
 
     if hasil_data is None:
         st.warning("Data hasil analisis tidak ditemukan. PDF tidak dapat dibuat.")
         return None
 
-    params_str = ", ".join([f"{k}={v}" for k,v in params_dict.items()]) if params_dict else "N/A"
+    params_str = (
+        ", ".join([f"{k}={v}" for k, v in params_dict.items()]) if params_dict else "N/A"
+    )
 
-    pdf = PDF(orientation='L', unit='mm', format='A4')
+    pdf = PDF(orientation="L", unit="mm", format="A4")
     pdf.alias_nb_pages()
+    
+    # === HALAMAN 1: PARAMETER & METRIK ===
     pdf.add_page()
-
-    # --- Bagian Input & Metrik ---
-    pdf.chapter_title('Parameter Analisis')
-    input_text = (f"Variabel Digunakan: {var}\nRentang Tahun: {tahun_pilihan[0]} - {tahun_pilihan[1]}\n"
-                f"Metode Clustering: {metode}\nParameter: {params_str}")
+    pdf.chapter_title("1. Parameter Analisis")
+    input_text = (
+        f"Variabel yang Digunakan: {var}\n"
+        f"Rentang Tahun Analisis: {tahun_pilihan[0]} - {tahun_pilihan[1]}\n"
+        f"Metode Clustering: {metode}\n"
+        f"Parameter: {params_str}"
+    )
     pdf.chapter_body(input_text)
-    pdf.chapter_title('Hasil Metrik Evaluasi')
+
+    pdf.ln(5)
+    pdf.chapter_title("2. Hasil Metrik Evaluasi")
     if scores:
-        sil_score_val=scores.get('silhouette'); dbi_score_val=scores.get('dbi'); time_sec_val=scores.get('time_sec')
-        sil_str = f"{sil_score_val:.3f}" if isinstance(sil_score_val,(int,float)) else "N/A"
-        dbi_str = f"{dbi_score_val:.3f}" if isinstance(dbi_score_val,(int,float)) else "N/A"
-        time_str = f"{time_sec_val:.2f} detik" if isinstance(time_sec_val,(int,float)) else "N/A"
-        metrics_text=(f"Silhouette Score: {sil_str}\nDavies-Bouldin Index: {dbi_str}\nWaktu Komputasi: {time_str}")
-        pdf.chapter_body(metrics_text)
-    else: pdf.chapter_body("Skor metrik tidak tersedia.")
+        sil = scores.get("silhouette")
+        dbi = scores.get("dbi")
+        time_val = scores.get("time_sec")
+        metric_text = (
+            f"Silhouette Score: {sil:.4f}\n"
+            f"   - Interpretasi: {'Baik' if sil > 0.5 else 'Cukup' if sil > 0.25 else 'Kurang Baik'}\n\n"
+            f"Davies-Bouldin Index: {dbi:.4f}\n"
+            f"   - Interpretasi: {'Baik' if dbi < 1.0 else 'Cukup' if dbi < 2.0 else 'Kurang Baik'}\n\n"
+            f"Waktu Komputasi: {time_val:.2f} detik\n"
+            f"Jumlah Total Data: {len(hasil_data)} wilayah\n"
+            f"Jumlah Cluster Terbentuk: {hasil_data['Cluster'].nunique()}"
+        )
+        pdf.chapter_body(metric_text)
+    else:
+        pdf.chapter_body("(Skor metrik tidak tersedia)")
 
-    # --- Bagian Plot ---
-    pdf.chapter_title('Visualisasi Hasil')
-
-    # --- PETA STATIS ---
-    pdf.set_font('Arial', 'I', 10); pdf.cell(0, 10, "Peta Persebaran Cluster (Statis)", 0, 1)
-    y_before_map = pdf.get_y()
-    if gdf_hasil is not None:
-        try:
-            map_buffer = render_static_map_to_buffer(gdf_hasil)
-            if map_buffer:
-                available_width = pdf.w - pdf.l_margin - pdf.r_margin; img_height = available_width * (8/15)
-                pdf.image(map_buffer, x=pdf.l_margin, y=y_before_map, w=available_width, h=img_height)
-                pdf.set_y(y_before_map + img_height + 5)
-            else: pdf.set_font('Arial', '', 10); pdf.multi_cell(0, 5, "(Gagal render gambar peta statis)"); pdf.ln()
-        except Exception as e: pdf.set_font('Arial', '', 10); pdf.multi_cell(0, 5, f"Error saat membuat peta statis PDF: {e}"); pdf.ln()
-    else: pdf.set_font('Arial', '', 10); pdf.multi_cell(0, 5, "(Data peta tidak tersedia untuk PDF)"); pdf.ln()
-
-    # Cek halaman baru
-    if pdf.get_y() > 190 : pdf.add_page()
-    y_before_plots = pdf.get_y()
-
-    # --- Silhouette Plot ---
-    pdf.set_font('Arial', 'I', 10); pdf.cell(0, 10, "Silhouette Plot", 0, 1)
-    x_plot1 = pdf.l_margin; max_y_plot1 = y_before_plots
-    if data_for_clustering is not None and scores is not None and scores.get('silhouette') is not None:
-        try:
-            sil_buffer = render_silhouette_plot_to_buffer(data_for_clustering, hasil_data, scores)
-            if sil_buffer:
-                plot_width = (pdf.w - pdf.l_margin - pdf.r_margin - 5) / 2; plot_height = plot_width * (5/7)
-                pdf.image(sil_buffer, x=x_plot1, y=y_before_plots, w=plot_width, h=plot_height)
-                x_after_plot1 = x_plot1 + plot_width + 5; max_y_plot1 = y_before_plots + plot_height
-            else:
-                plot_width = (pdf.w - pdf.l_margin - pdf.r_margin - 5) / 2
-                pdf.set_font('Arial', '', 10); pdf.multi_cell(plot_width, 5, "(Gagal render Silhouette Plot)"); max_y_plot1 = pdf.get_y(); x_after_plot1 = x_plot1 + plot_width + 5; pdf.set_xy(x_after_plot1, y_before_plots)
-        except Exception as e: # Error image
-            plot_width = (pdf.w - pdf.l_margin - pdf.r_margin - 5) / 2
-            pdf.set_font('Arial', '', 10); pdf.multi_cell(plot_width, 5, f"Error Silhouette Plot: {e}"); max_y_plot1 = pdf.get_y(); x_after_plot1 = x_plot1 + plot_width + 5; pdf.set_xy(x_after_plot1, y_before_plots)
-    else: # Data tidak cukup
-        plot_width = (pdf.w - pdf.l_margin - pdf.r_margin - 5) / 2
-        pdf.set_font('Arial', '', 10); pdf.multi_cell(plot_width, 5, "(Data tidak cukup untuk Silhouette Plot)"); max_y_plot1 = pdf.get_y(); x_after_plot1 = x_plot1 + plot_width + 5; pdf.set_xy(x_after_plot1, y_before_plots)
-
-    # --- Box Plot ---
-    pdf.set_xy(x_after_plot1 if 'x_after_plot1' in locals() else pdf.l_margin, y_before_plots)
-    pdf.set_font('Arial', 'I', 10); pdf.cell(0, 10, "Distribusi Nilai per Cluster", 0, 1)
-    pdf.set_x(x_after_plot1 if 'x_after_plot1' in locals() else pdf.l_margin)
-    max_y_plot2 = y_before_plots
-    try:
-        box_buffer = render_boxplot_to_buffer(hasil_data, data_for_clustering)
-        if box_buffer:
-            plot_width = (pdf.w - pdf.l_margin - pdf.r_margin - 5) / 2; img_height = 80
-            pdf.image(box_buffer, x=x_plot1, y=y_before_plots, w=plot_width, h=img_height)
-            max_y_plot2 = pdf.get_y() + img_height + 5
-        else:
-            plot_width = (pdf.w - pdf.l_margin - pdf.r_margin - 5) / 2
-            pdf.set_font('Arial', '', 10); pdf.multi_cell(plot_width, 5, "(Gagal render Box Plot)"); max_y_plot2 = pdf.get_y()
-    except Exception as e:
-        plot_width = (pdf.w - pdf.l_margin - pdf.r_margin - 5) / 2
-        pdf.set_font('Arial', '', 10); pdf.multi_cell(plot_width, 5, f"Error Box Plot: {e}"); max_y_plot2 = pdf.get_y()
-
-    pdf.set_y(max(max_y_plot1, max_y_plot2) + 10)
-
-    # --- Bagian Tabel Hasil ---
+    # === HALAMAN 2: SILHOUETTE PLOT (Full Page) ===
     pdf.add_page()
-    pdf.chapter_title('Tabel Hasil Clustering (Data Asli)')
-    cols_pdf = ['ID', 'prov', 'kab_kota', 'Cluster']
-    if 'Point Type' in hasil_data.columns: cols_pdf.append('Point Type')
-    data_cols_used = data_for_clustering.columns.tolist() if data_for_clustering is not None else []
-    cols_pdf.extend(data_cols_used[:2]); cols_pdf = list(dict.fromkeys(cols_pdf))
-    cols_pdf_final = [col for col in cols_pdf if col in hasil_data.columns]
+    pdf.chapter_title("3. Silhouette Plot")
+    sil_buf = render_silhouette_to_buffer(hasil_data, data_for_clustering)
+    if sil_buf:
+        # Full page silhouette plot
+        pdf.image(sil_buf, x=50, y=pdf.get_y(), w=200)
+    else:
+        pdf.chapter_body("(Silhouette plot tidak tersedia)")
 
-    pdf.add_dataframe_to_pdf(hasil_data, max_rows=100, cols_to_show=cols_pdf_final)
+    # === HALAMAN 3: PETA PERSEBARAN CLUSTER (Full Page) ===
+    pdf.add_page()
+    # === HALAMAN 3: PETA PERSEBARAN CLUSTER (Full Page) ===
+    pdf.add_page()
+    pdf.chapter_title("4. Peta Persebaran Cluster Wilayah")
+    if gdf_hasil is not None:
+        map_buf = render_static_map_to_buffer(gdf_hasil)
+        if map_buf:
+            # Full page map
+            pdf.image(map_buf, x=10, y=pdf.get_y(), w=277)
+        else:
+            pdf.chapter_body("(Gagal membuat peta statis)")
+    else:
+        pdf.chapter_body("(Data peta tidak tersedia)")
 
-    # Output PDF sebagai bytes
+    # === HALAMAN 4: DISTRIBUSI CLUSTER (BOX PLOT - Full Page) ===
+    pdf.add_page()
+    pdf.chapter_title("5. Distribusi Nilai per Cluster (Box Plot)")
+    box_buf = render_boxplot_to_buffer(hasil_data, data_for_clustering)
+    if box_buf:
+        # Full page boxplot
+        pdf.image(box_buf, x=10, y=pdf.get_y(), w=277)
+    else:
+        pdf.chapter_body("(Box plot tidak tersedia)")
+
+    # === HALAMAN 5: SCATTER PLOT MATRIX (Full Page) ===
+    pdf.add_page()
+    pdf.chapter_title("6. Visualisasi Scatter Plot Matrix")
+    scatter_buf = render_scatter_to_buffer(hasil_data, data_for_clustering)
+    if scatter_buf:
+        # Ukuran disesuaikan agar muat di halaman
+        pdf.image(scatter_buf, x=20, y=pdf.get_y(), w=200)
+    else:
+        pdf.chapter_body("(Scatter plot tidak tersedia)")
+
+    # === HALAMAN 6: STATISTIK DESKRIPTIF PER CLUSTER ===
+    pdf.add_page()
+    pdf.chapter_title("7. Statistik Deskriptif per Cluster")
+    
     try:
-        pdf_output_bytes = pdf.output(dest='S').encode('latin-1')
-        return pdf_output_bytes
+        cluster_stats = hasil_data.groupby('Cluster').agg({
+            col: ['mean', 'std', 'min', 'max'] 
+            for col in data_for_clustering.columns
+        }).round(2)
+        
+        cluster_counts = hasil_data['Cluster'].value_counts().sort_index()
+        
+        for cluster in sorted(hasil_data['Cluster'].unique()):
+            pdf.set_font('Arial', 'B', 11)
+            pdf.cell(0, 8, f"Cluster {cluster} (Jumlah: {cluster_counts[cluster]} wilayah)", 0, 1, 'L')
+            pdf.set_font('Courier', '', 8)
+            
+            stats_text = ""
+            for col in data_for_clustering.columns:
+                mean_val = cluster_stats.loc[cluster, (col, 'mean')]
+                std_val = cluster_stats.loc[cluster, (col, 'std')]
+                min_val = cluster_stats.loc[cluster, (col, 'min')]
+                max_val = cluster_stats.loc[cluster, (col, 'max')]
+                
+                stats_text += f"  {col}:\n"
+                stats_text += f"    Mean: {mean_val:.2f}, Std: {std_val:.2f}, Min: {min_val:.2f}, Max: {max_val:.2f}\n"
+            
+            pdf.multi_cell(0, 5, stats_text)
+            pdf.ln(3)
+    except Exception as e:
+        pdf.chapter_body(f"(Gagal menghitung statistik: {e})")
+
+    # === HALAMAN 7: TABEL HASIL (Sampel Data) ===
+    pdf.add_page()
+    pdf.chapter_title("8. Tabel Hasil Clustering (50 Data Teratas)")
+    cols_show = ["ID", "prov", "kab_kota", "Cluster"]
+    if "Point Type" in hasil_data.columns:
+        cols_show.append("Point Type")
+    
+    # Tambahkan kolom fitur clustering
+    for col in data_for_clustering.columns[:3]:  # Maksimal 3 kolom fitur
+        if col not in cols_show:
+            cols_show.append(col)
+    
+    cols_show = list(dict.fromkeys(cols_show))
+    pdf.add_dataframe_to_pdf(hasil_data, max_rows=50, cols_to_show=cols_show)
+
+    # Generate PDF output
+    try:
+        pdf_output = pdf.output(dest="S")
+        
+        if isinstance(pdf_output, bytes):
+            return pdf_output
+        elif isinstance(pdf_output, str):
+            return pdf_output.encode("latin-1")
+        elif isinstance(pdf_output, bytearray):
+            return bytes(pdf_output)
+        else:
+            st.error(f"Tipe output PDF tidak dikenali: {type(pdf_output)}")
+            return None
+            
     except Exception as e:
         st.error(f"Gagal menghasilkan output PDF: {e}")
+        import traceback
+        st.error(traceback.format_exc())
         return None

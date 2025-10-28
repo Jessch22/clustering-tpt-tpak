@@ -24,6 +24,11 @@ def run_analysis(var, tahun_pilihan, metode_terpilih, params, path, sheet):
     st.session_state['map_object'] = None
     st.session_state['cluster_color_map'] = None
 
+
+     # *** TAMBAHAN: SIMPAN var DAN params KE SESSION_STATE ***
+    st.session_state['var'] = var
+    st.session_state['params'] = params
+
     start_proc = time.perf_counter()
 
     try:
@@ -132,9 +137,19 @@ def run_analysis(var, tahun_pilihan, metode_terpilih, params, path, sheet):
                         gdf['prov_g'] = ""
 
                     df_hasil_final_map = st.session_state['hasil_data'].copy()
+
+                    # --- Hapus kab/kota yang kosong, NaN, atau string "None" ---
+                    df_hasil_final_map = df_hasil_final_map[
+                        df_hasil_final_map['kab_kota'].notna() &
+                        (df_hasil_final_map['kab_kota'].astype(str).str.lower() != 'none') &
+                        (df_hasil_final_map['kab_kota'].astype(str).str.strip() != '')
+                    ]
+
+                    # --- Lanjutkan seperti biasa ---
                     df_hasil_final_map['orig_name_df'] = df_hasil_final_map['kab_kota'].astype(str)
                     df_hasil_final_map['norm_name_df'] = _normalize_name_series(df_hasil_final_map['orig_name_df'])
                     df_hasil_final_map['join_name'] = _make_join_key(df_hasil_final_map['norm_name_df'])
+
 
                     if 'prov' in df_hasil_final_map.columns:
                         df_hasil_final_map['prov_d'] = _normalize_name_series(df_hasil_final_map['prov'].astype(str))
@@ -149,8 +164,15 @@ def run_analysis(var, tahun_pilihan, metode_terpilih, params, path, sheet):
                             how='left',
                             validate="m:1"
                         )
+
+                        unmatched = gdf_merged[gdf_merged['Cluster'].isna()][['orig_name', 'prov']]
+                        if not unmatched.empty:
+                            st.warning(f"{len(unmatched)} wilayah tidak cocok dengan dataset:")
+                            st.dataframe(unmatched)
+
                     except Exception as e_merge:
-                        st.warning(f"Gagal merge awal ({e_merge}). Mencoba merge fallback (nama saja).")
+
+
                         gdf_merged = gdf.merge(
                             df_hasil_final_map[['join_name', 'Cluster', 'prov_d', 'orig_name_df']],
                             left_on='join_name',
