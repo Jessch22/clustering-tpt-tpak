@@ -310,6 +310,7 @@ def render_silhouette_plot(data_for_clustering, hasil_data, scores):
     
     try:
         sample_silhouette_values = silhouette_samples(data_for_clustering, labels)
+        st.caption("Bar yang mengarah ke kiri menunjukkan nilai silhouette negatif, dan lebar/tinggi tiap blok mewakili ukuran cluster sesuai jumlah anggotanya.")
     except Exception as e: 
         st.error(f"Gagal membuat sample silhouette values: {e}"); return
         
@@ -341,7 +342,6 @@ def render_silhouette_plot(data_for_clustering, hasil_data, scores):
 def render_scatter_plots(df_hasil, data_for_clustering=None):
     """Membuat pair plot Seaborn dengan warna konsisten."""
     
-    st.subheader("SEBARAN DATA (PAIR PLOT SEABORN)")
     
     # Jika df_hasil tidak valid, tampilkan info dan keluar
     if df_hasil is None or df_hasil.empty: st.info("Data tidak valid."); return
@@ -399,10 +399,9 @@ def render_scatter_plots(df_hasil, data_for_clustering=None):
             palette=seaborn_palette
         )
         # Set judul utama dan tampilkan plot
-        pair_plot.fig.suptitle(f"Pair Plot Seaborn ({', '.join(scatter_vars)}) - Data Normalisasi", y=1.02)
+        pair_plot.fig.suptitle(f"Pair Plot Seaborn ({', '.join(scatter_vars)})", y=1.02)
         st.pyplot(pair_plot.fig, clear_figure=True)
         plt.close(pair_plot.fig)
-        st.caption("Plot ini menggunakan data yang sudah dinormalisasi.")
     except Exception as e:
         st.error(f"Gagal membuat Seaborn pair plot: {e}")
 
@@ -448,77 +447,4 @@ def render_static_map_to_buffer(gdf_to_plot):
     except Exception as e:
         st.error(f"[PDF] Error rendering peta statis ke buffer: {e}")
         if fig is not None and plt.fignum_exists(fig.number): plt.close(fig)
-        return None
-
-def render_silhouette_plot_to_buffer(data_for_clustering, hasil_data, scores):
-    fig = None
-    try:
-        labels = hasil_data['Cluster']; unique_labels = labels.unique()
-        n_clusters_valid = len([l for l in unique_labels if l != -1 and pd.notna(l)])
-        if n_clusters_valid < 2: return None
-        silhouette_avg = scores.get('silhouette');
-        if silhouette_avg is None: return None
-        sample_silhouette_values = silhouette_samples(data_for_clustering, labels)
-
-        fig, ax = plt.subplots(figsize=(6, 4)); y_lower = 10
-        cluster_labels_sorted = sorted([label for label in unique_labels if label != -1 and pd.notna(label)])
-        color_map_sil_buf = get_cluster_color_map(cluster_labels_sorted)
-
-        for i in cluster_labels_sorted:
-            ith_cluster_silhouette_values = sample_silhouette_values[labels == i]; ith_cluster_silhouette_values.sort()
-            size_cluster_i = ith_cluster_silhouette_values.shape[0]; y_upper = y_lower + size_cluster_i
-            color = color_map_sil_buf.get(i, 'black')
-            ax.fill_betweenx(np.arange(y_lower, y_upper), 0, ith_cluster_silhouette_values, facecolor=color, edgecolor=color, alpha=0.7)
-            ax.text(-0.05, y_lower + 0.5 * size_cluster_i, str(i), fontsize=8); y_lower = y_upper + 10
-        ax.set_title("Silhouette Plot", fontsize=10); ax.set_xlabel("Silhouette Coefficient", fontsize=9); ax.set_ylabel("Cluster", fontsize=9)
-        ax.axvline(x=silhouette_avg, color="red", linestyle="--"); ax.set_yticks([])
-        ax.set_xticks(np.arange(-0.1, 1.1, 0.2)); ax.set_xlim([-0.1, 1.0]); ax.tick_params(axis='x', labelsize=8)
-        buf = io.BytesIO(); fig.savefig(buf, format='png', bbox_inches='tight', dpi=150); buf.seek(0); plt.close(fig)
-        return buf
-    except Exception as e:
-        st.error(f"Error rendering silhouette plot to buffer: {e}")
-        if fig is not None and plt.fignum_exists(fig.number): plt.close(fig)
-        return None
-
-def render_boxplot_to_buffer(df_hasil, data_for_clustering=None):
-    """Render boxplot ke buffer BytesIO dengan warna konsisten."""
-    try:
-        exclude_cols_box = ['No', 'Cluster']; value_vars = data_for_clustering.columns.tolist() if data_for_clustering is not None else [col for col in df_hasil.select_dtypes(include=np.number).columns if col not in exclude_cols_box and '_' in col]
-        if not value_vars: return None
-        id_vars = ['kab_kota', 'Cluster']; df_hasil_melt = df_hasil.copy(); df_hasil_melt['kab_kota'] = df_hasil_melt['kab_kota'].astype(str)
-        df_long = pd.melt(df_hasil_melt, id_vars=id_vars, value_vars=value_vars, var_name='Variable_Tahun', value_name='Nilai')
-        try:
-            split_data = df_long['Variable_Tahun'].str.extract(r'^(.*?)_(\d{4})$');
-            if split_data.isnull().all().all(): split_data = df_long['Variable_Tahun'].str.rsplit('_', n=1, expand=True)
-            df_long['Variabel'] = split_data[0]; df_long['Tahun'] = split_data[1]; df_long.dropna(subset=['Variabel', 'Tahun'], inplace=True)
-            if df_long.empty: return None
-            unique_years = sorted(df_long['Tahun'].unique()); df_long['Tahun'] = pd.Categorical(df_long['Tahun'], categories=unique_years, ordered=True)
-        except Exception: return None # Gagal parse
-        unique_clusters_valid = sorted([c for c in df_long['Cluster'].unique() if pd.notna(c) and c != -1])
-        df_long['Cluster_Str'] = df_long['Cluster'].astype(str) # String untuk Plotly
-        cluster_categories_str = sorted([str(c) for c in unique_clusters_valid], key=lambda x: int(x))
-        if '-1' in df_long['Cluster_Str'].unique(): cluster_categories_str.append('-1')
-
-        color_map_plotly_buf = get_cluster_color_map(unique_clusters_valid)
-        color_discrete_map_box_buf = {str(k): v for k, v in color_map_plotly_buf.items()}
-        if '-1' in df_long['Cluster_Str'].unique(): color_discrete_map_box_buf['-1'] = color_map_plotly_buf.get(-1, 'lightgrey')
-
-        fig_box = px.box(
-            df_long, x='Tahun', y='Nilai', color='Cluster_Str', facet_col='Variabel',
-            title="Distribusi Nilai Variabel per Cluster dan Tahun",
-            category_orders={"Tahun": unique_years, "Cluster_Str": cluster_categories_str},
-            color_discrete_map=color_discrete_map_box_buf,
-            facet_col_wrap=2, facet_col_spacing=0.05, facet_row_spacing=0.1
-        )
-        fig_box.update_yaxes(matches=None, showticklabels=True, title_text="")
-        fig_box.update_xaxes(title_text="Tahun")
-        fig_box.update_layout(height=400*((len(value_vars)+1)//2), boxmode='group', font_size=8, title_font_size=10, legend_title_text='Cluster')
-        fig_box.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1]))
-
-        buf = io.BytesIO()
-        fig_box.write_image(buf, format='png', scale=2, engine='kaleido')
-        buf.seek(0)
-        return buf
-    except Exception as e:
-        st.error(f"Error rendering boxplot to buffer: {e}")
         return None

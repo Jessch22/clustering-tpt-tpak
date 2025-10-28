@@ -3,6 +3,8 @@ from modules.konten import penjelasan_tpt, penjelasan_tpak
 from utils.session import opsi_tahun
 from streamlit_folium import st_folium
 import time
+import pandas as pd
+import numpy as np
 
 from modules.analysis import run_analysis
 from modules.plot import (
@@ -147,14 +149,32 @@ def render_clustering_page():
         )
 
     st.divider()
-    st.subheader("DISTRIBUSI CLUSTER (BOX PLOT)")
+    st.subheader("JUMLAH WILAYAH PER CLUSTER", help="Tabel ini menunjukkan jumlah wilayah yang termasuk dalam setiap cluster hasil clustering.")
+    if st.session_state.get("hasil_data") is not None:
+        hasil_df = st.session_state["hasil_data"]
+        if "Cluster" in hasil_df.columns:
+            cluster_counts = hasil_df["Cluster"].value_counts().sort_index()
+            counts_df = pd.DataFrame({
+                "Cluster": cluster_counts.index.astype(str),
+                "Jumlah_wilayah": cluster_counts.values
+            })
+            counts_df = counts_df.reset_index(drop=True)
+            st.table(counts_df)
+        else:
+            st.info("Kolom 'Cluster' tidak ditemukan pada hasil clustering.")
+    else:
+        st.info("Belum ada hasil clustering untuk menampilkan jumlah wilayah per cluster.")
+        
+    st.divider()
+    
+    st.subheader("DISTRIBUSI CLUSTER (BOX PLOT)", help="Box plot digunakan untuk melihat distribusi nilai variabel pada tiap cluster.")
     render_boxplot(
         st.session_state.get("hasil_data"),
         st.session_state.get("data_for_clustering"),
     )
 
     st.divider()
-    st.subheader("PETA WILAYAH (INTERAKTIF)")
+    st.subheader("PETA WILAYAH (INTERAKTIF)", help="Gunakan Box Plot di atas untuk melihat distribusi nilai variabel pada tiap cluster.")
     if st.session_state.get("map_object") is not None:
         with st.spinner("Memuat peta..."):
             try:
@@ -171,7 +191,7 @@ def render_clustering_page():
         st.container(height=600)
 
     st.divider()
-    st.subheader("VISUALISASI SCATTER CLUSTER")
+    st.subheader("SEBARAN DATA (PAIR PLOT SEABORN)", help="Visualisasi pair plot digunakan untuk melihat sebaran cluster dan hubungan antar variabel.")
     render_scatter_plots(
         st.session_state.get("hasil_data"),
         st.session_state.get("data_for_clustering"),
@@ -181,9 +201,33 @@ def render_clustering_page():
     st.subheader("TABEL & LAPORAN HASIL")
 
     if st.session_state.get("hasil_data") is not None:
-        st.dataframe(st.session_state["hasil_data"], use_container_width=True)
-        col_dl_1, col_dl_2 = st.columns([1, 1])
+        df_hasil = st.session_state["hasil_data"]
+        df_cluster_data = st.session_state.get("data_for_clustering")
+        
+        # 1. Tentukan kolom dasar yang selalu ingin ditampilkan
+        cols_to_show = ['ID', 'prov', 'kab_kota', 'Cluster']
+        
+        # 2. Tambahkan 'Point Type' jika ada (hasil DBSCAN)
+        if 'Point Type' in df_hasil.columns:
+            cols_to_show.append('Point Type')
+            
+        # 3. Ambil kolom variabel yang DIPILIH (dari data_for_clustering)
+        if df_cluster_data is not None and not df_cluster_data.empty:
+            selected_var_cols = df_cluster_data.columns.tolist()
+            # Tambahkan kolom variabel yang dipilih ke daftar
+            for col in selected_var_cols:
+                if col not in cols_to_show:
+                    cols_to_show.append(col)
+        
+        # 4. Filter dataframe utama (df_hasil) agar hanya menampilkan kolom yang ada di cols_to_show
+        final_cols_exist = [col for col in cols_to_show if col in df_hasil.columns]
+        df_display = df_hasil[final_cols_exist]
+        
+        # 5. Tampilkan dataframe yang sudah difilter
+        st.dataframe(df_display, use_container_width=True)
 
+        col_dl_1, col_dl_2 = st.columns([1, 1])
+        
         with col_dl_1:
             if st.button("📄 Simpan Laporan PDF", type="primary", use_container_width=True):
                 try:

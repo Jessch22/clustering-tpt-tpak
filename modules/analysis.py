@@ -201,7 +201,7 @@ def run_analysis(var, tahun_pilihan, metode_terpilih, params, path, sheet):
                     try:
                         n_matched = gdf_merged['Cluster'].notna().sum()
                         n_total = len(gdf_merged)
-                        st.info(f"Wilayah yang berhasil dicocokkan: {n_matched}/{n_total}")
+                        st.info(f"Wilayah yang berhasil dicocokkan: {n_matched-1}/{n_total-1}")
                     except Exception:
                         pass
 
