@@ -99,7 +99,7 @@ def render_clustering_page():
             st.markdown("Epsilon (Jarak maksimum antar titik untuk dianggap sebagai tetangga)")
             eps_value = st.slider(
                 "Epsilon",
-                0.1,
+                0.5,
                 25.0,
                 step=0.1,
                 key="eps_value",
