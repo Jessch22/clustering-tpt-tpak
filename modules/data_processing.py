@@ -35,7 +35,7 @@ def muat_data(path, sheet):
 #* 2. Preprocessing
 # Menghapus non-numerik
 def del_col_non_numeric(data):
-  col_non_numeric = ['ID', 'prov', 'kab_kota']
+  col_non_numeric = ['prov', 'kab_kota']
   cek_column = [c for c in col_non_numeric if c in data.columns]
   data_num = data.drop(columns=cek_column)
   return data_num

@@ -462,7 +462,7 @@ def generate_pdf_report():
     # === HALAMAN 7: TABEL HASIL ===
     pdf.add_page()
     pdf.chapter_title("8. Tabel Hasil Clustering")
-    cols_show = ["ID", "prov", "kab_kota", "Cluster"]
+    cols_show = ["prov", "kab_kota", "Cluster"]
     
     if data_for_clustering is not None:
         for col in data_for_clustering.columns:

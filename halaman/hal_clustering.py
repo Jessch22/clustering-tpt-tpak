@@ -205,7 +205,7 @@ def render_clustering_page():
         df_cluster_data = st.session_state.get("data_for_clustering")
         
         # 1. Tentukan kolom dasar yang selalu ingin ditampilkan
-        cols_to_show = ['ID', 'prov', 'kab_kota', 'Cluster']
+        cols_to_show = ['prov', 'kab_kota', 'Cluster']
         
         # 2. Tambahkan 'Point Type' jika ada (hasil DBSCAN)
         if 'Point Type' in df_hasil.columns:

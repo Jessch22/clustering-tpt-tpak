@@ -202,9 +202,9 @@ def render_boxplot(df_hasil, data_for_clustering=None):
         if data_for_clustering is not None and not data_for_clustering.empty:
             value_vars = data_for_clustering.columns.tolist()
         else:
-            # Jika tidak, gunakan semua kolom numerik kecuali 'ID' dan 'Cluster' untuk dimelt
+            # Jika tidak, gunakan semua kolom numerik kecuali 'Cluster' untuk dimelt
             potential_value_vars = df_hasil.select_dtypes(include=np.number).columns.tolist()
-            exclude_cols = ['ID', 'Cluster']
+            exclude_cols = ['Cluster']
             value_vars = [col for col in potential_value_vars if col not in exclude_cols and '_' in col]
             if not value_vars: st.error("Tidak ada kolom yang valid untuk ditampilkan."); return
             

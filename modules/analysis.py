@@ -38,14 +38,14 @@ def run_analysis(var, tahun_pilihan, metode_terpilih, params, path, sheet):
             st.error("Dataset kosong. Pastikan file DATASET.xlsx benar dan memiliki sheet yang dipilih.")
             return
 
-        # Pastikan ada kolom ID, prov, kab_kota
-        required_cols = ['ID', 'prov', 'kab_kota']
+        # Pastikan ada kolom prov, kab_kota
+        required_cols = ['prov', 'kab_kota']
         for c in required_cols:
             if c not in df_raw.columns:
                 st.error(f"Kolom '{c}' tidak ditemukan di dataset. Pastikan dataset memiliki kolom ID, prov, kab_kota.")
                 return
 
-        identity_cols = df_raw[['ID', 'prov', 'kab_kota']].copy()
+        identity_cols = df_raw[['prov', 'kab_kota']].copy()
 
         # Preprocessing: menghasilkan data_clean, data_norm, data_splits, dsb.
         datacol_num, data_replace, data_clean, data_norm, data_splits = preprocessing_data(df_raw)
