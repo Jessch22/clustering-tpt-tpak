@@ -103,7 +103,7 @@ def render_clustering_page():
                 25.0,
                 step=0.1,
                 key="eps_value",
-                value=st.session_state.get("eps_value", 0.1),
+                value=st.session_state.get("eps_value", 0.5),
                 label_visibility="collapsed",
             )
             st.markdown("MinPts (Jumlah minimum titik dalam radius Epsilon untuk membentuk sebuah cluster)")
