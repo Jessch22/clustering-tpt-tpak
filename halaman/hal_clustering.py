@@ -16,6 +16,19 @@ from utils.saveaspdf import generate_pdf_report
 
 
 def render_clustering_page():
+    st.markdown("""
+    <style>
+    h1 {
+        text-align: center;
+    }
+    
+    @media (max-width: 600px) {
+        h1 {
+            font-size: 1.6rem;
+        }
+    }
+    </style>
+    """, unsafe_allow_html=True)
     st.title(
         "Sistem Pemetaan Wilayah Berdasarkan Tingkat Pengangguran Terbuka dan Tingkat Partisipasi Angkatan Kerja di Indonesia dengan K-Means dan DBSCAN"
     )
@@ -69,8 +82,42 @@ def render_clustering_page():
             st.session_state["tahun_pilihan"] = (tp_after, tp_after)
         elif isinstance(tp_after, list):
             st.session_state["tahun_pilihan"] = tuple(tp_after)
-        st.divider()
+        
+        if var:
+            n_vars = (1 if tpt else 0) + (1 if tpak else 0)
+            
+            current_tahun_range = st.session_state["tahun_pilihan"] 
+            start_year = int(current_tahun_range[0])
+            end_year = int(current_tahun_range[1])
+            n_years = (end_year - start_year) + 1
+            
+            # Dimensi
+            D = n_vars * n_years
+            
+            selected_vars_list = []
+            if tpt: selected_vars_list.append("TPT")
+            if tpak: selected_vars_list.append("TPAK")
+            
+            selected_years_list = [str(y) for y in range(start_year, end_year + 1)]
 
+            feature_list = []
+            for v_name in selected_vars_list:
+                for y_name in selected_years_list:
+                    feature_list.append(f"{v_name}_{y_name}")
+            
+            MAX_FEATURES_TO_SHOW = 7
+            if D > 0:
+                if D <= MAX_FEATURES_TO_SHOW:
+                    feature_str = ", ".join(feature_list)
+                    st.info(f"**Dimensi (D) = {D}** ({feature_str})")
+                else:
+                    feature_str_short = f"{feature_list[0]}, {feature_list[1]}, {feature_list[2]} ... {feature_list[-2]}, {feature_list[-1]}"
+                    st.info(f"**Dimensi (D) = {D}** (Fitur: {feature_str_short}, dst.)")
+            else:
+                st.info(f"**Dimensi (D) = 0**")
+                
+        st.divider()
+        
         # * Metode & Parameter
         st.subheader("METODE & PARAMETER")
         metode_options = ["K-Means", "DBSCAN"]
@@ -85,6 +132,13 @@ def render_clustering_page():
         )
         params = {}
         if metode == "K-Means":
+            optimal_k = st.checkbox(
+                "Nilai K Optimal",
+                key="optimal_k",
+                value=st.session_state.get("optimal_k", False),
+                help="Jika dicentang, sistem secara otomatis memilih K dengan Silhouette Score terbaik."
+            )
+                        
             st.markdown("K (Jumlah cluster yang ingin dibentuk)")
             k_value = st.slider(
                 "K",
@@ -93,35 +147,67 @@ def render_clustering_page():
                 key="k_value",
                 value=st.session_state.get("k_value", 2),
                 label_visibility="collapsed",
+                disabled=optimal_k,
             )
             params["k"] = k_value
+            params["optimal_k"] = optimal_k
+            
         elif metode == "DBSCAN":
+            optimal_dbscan = st.checkbox(
+                "Nilai Epsilon & MinPts Optimal", 
+                key="optimal_dbscan", 
+                value=st.session_state.get("optimal_dbscan", False),
+                help="""
+                Jika dicentang, sistem akan otomatis:
+                - PCA digunakan jika Dimensi≥3
+                - MinPts diatur sesuai Dimensi+1
+                - Mencari nilai epsilon terbaik dengan K-distance Knee.
+                """
+            )
+            
             st.markdown("Epsilon (Jarak maksimum antar titik untuk dianggap sebagai tetangga)")
             eps_value = st.slider(
                 "Epsilon",
-                0.5,
-                25.0,
+                0.1,
+                30.0,
                 step=0.1,
                 key="eps_value",
                 value=st.session_state.get("eps_value", 0.5),
                 label_visibility="collapsed",
+                disabled=optimal_dbscan,
             )
             st.markdown("MinPts (Jumlah minimum titik dalam radius Epsilon untuk membentuk sebuah cluster)")
             minpts_value = st.slider(
                 "MinPts",
-                2,
-                42,
+                3,
+                20,
                 step=1,
                 key="minpts_value",
-                value=st.session_state.get("minpts_value", 2),
+                value=st.session_state.get("minpts_value", 3),
                 label_visibility="collapsed",
+                disabled=optimal_dbscan,
             )
+            
+            use_pca_manual = st.checkbox(
+                "Terapkan PCA (jika D >= 3)",
+                key="use_pca_manual",
+                value=st.session_state.get("use_pca_manual", True),
+                disabled=optimal_dbscan,
+                help="""
+                - Wajib untuk Dimensi yang lebih dari sama dengan 3 (D>=3).
+                - Tujuan: Mengurangi Dimensi agar DBSCAN lebih efektif dalam menemukan cluster.
+                - Jika tidak dicentang, DBSCAN akan dijalankan pada Dimensi asli.
+                """
+            )
+            
             params["eps"] = eps_value
             params["minpts"] = minpts_value
+            params["optimal_dbscan"] = optimal_dbscan
+            params["use_pca_manual"] = use_pca_manual
 
         st.divider()
         run_button = st.button(
-            "Jalankan Clustering & Peta", type="primary", use_container_width=True
+            "Jalankan Clustering", type="primary", use_container_width=True
         )
         if run_button:
             if not var:
@@ -129,6 +215,7 @@ def render_clustering_page():
                     "Silakan pilih minimal satu variabel (TPT atau TPAK) terlebih dahulu sebelum menjalankan."
                 )
             else:
+                logger = st.sidebar.status("Memulai proses clustering...", expanded=True)
                 with st.spinner("Memproses data dan membuat peta..."):
                     run_analysis(
                         var,
@@ -137,7 +224,10 @@ def render_clustering_page():
                         params,
                         path,
                         sheet,
+                        logger
                     )
+                    
+                    logger.update(label="Proses Selesai!", state="complete", expanded=True)
 
     # BAGIAN 3 - OUTPUT HASIL
     with col2:  # Metrik & Silhouette
@@ -161,20 +251,20 @@ def render_clustering_page():
             counts_df = counts_df.reset_index(drop=True)
             st.table(counts_df)
         else:
-            st.info("Kolom 'Cluster' tidak ditemukan pada hasil clustering.")
+            st.warning("Kolom 'Cluster' tidak ditemukan pada hasil clustering.")
     else:
-        st.info("Belum ada hasil clustering untuk menampilkan jumlah wilayah per cluster.")
+        st.warning("Belum ada hasil clustering untuk menampilkan jumlah wilayah per cluster.")
         
     st.divider()
     
-    st.subheader("DISTRIBUSI CLUSTER (BOX PLOT)", help="Box plot digunakan untuk melihat distribusi nilai variabel pada tiap cluster.")
+    st.subheader("DISTRIBUSI CLUSTER (BOX PLOT)", help="Box plot digunakan untuk memahami distribusi nilai variabel pada tiap cluster yang terbentuk. Perhatikan median, kuartil, dan outlier pada setiap box plot untuk melihat karakteristik cluster.")
     render_boxplot(
         st.session_state.get("hasil_data"),
         st.session_state.get("data_for_clustering"),
     )
 
     st.divider()
-    st.subheader("PETA WILAYAH (INTERAKTIF)", help="Gunakan Box Plot di atas untuk melihat distribusi nilai variabel pada tiap cluster.")
+    st.subheader("PETA WILAYAH (INTERAKTIF)", help="Peta interaktif yang menunjukkan sebaran geografis berdasarkan cluster yang terbentuk.")
     if st.session_state.get("map_object") is not None:
         with st.spinner("Memuat peta..."):
             try:
@@ -191,7 +281,8 @@ def render_clustering_page():
         st.container(height=600)
 
     st.divider()
-    st.subheader("SEBARAN DATA (PAIR PLOT SEABORN)", help="Visualisasi pair plot digunakan untuk melihat sebaran cluster dan hubungan antar variabel.")
+    st.subheader("SEBARAN DATA (PAIR PLOT SEABORN)", help="Visualisasi pair plot digunakan untuk seberapa baik cluster yang terbentuk dapat memisahkan data berdasarkan variabel yang dipilih. Plot ini menunjukkan sebaran data untuk setiap pasangan variabel, membantu melihat pola yang tumpang tindih antar cluster")
+    st.caption("**Cara Membaca:** Grafik di **Diagonal** (bukit) menunjukkan sebaran *satu variabel saja*. Jika bukit-bukitnya tumpang tindih, artinya variabel itu saja tidak cukup untuk membedakan cluster. Grafik **Scatter Plot** (titik-titik) digunakan untuk melihat apakah gumpalan data (cluster) terpisah dengan jelas saat membandingkan *dua variabel*.")
     render_scatter_plots(
         st.session_state.get("hasil_data"),
         st.session_state.get("data_for_clustering"),
@@ -273,6 +364,11 @@ def render_clustering_page():
                     "map_object",
                     "var",
                     "params",
+                    "optimal_k",
+                    "optimal_dbscan",
+                    "k_value",
+                    "eps_value",
+                    "minpts_value"
                 ]
                 for key in keys_to_clear:
                     if key in st.session_state:

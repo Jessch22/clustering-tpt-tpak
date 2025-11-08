@@ -2,8 +2,6 @@ import numpy as np
 import pandas as pd
 from sklearn.cluster import KMeans
 from sklearn.cluster import DBSCAN
-from sklearn.metrics import silhouette_score
-from sklearn.metrics import silhouette_score, davies_bouldin_score
 import time
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -118,11 +116,7 @@ def kmeans_clustering(data, nilai_k):
   kmeans = KMeans(n_clusters=nilai_k, random_state=42)
   labels = kmeans.fit_predict(data)
   
-  # Silhouette Score dan Davies-Bouldin Index
-  sil = silhouette_score(data, labels) if len(set(labels)) > 1 else None
-  dbi = davies_bouldin_score(data, labels) if len(set(labels)) > 1 else None
-  
-  return {"labels": labels, "silhouette": sil, "dbi": dbi, "centroids": kmeans.cluster_centers_}
+  return {"labels": labels, "centroids": kmeans.cluster_centers_}
   
 #* 4. DBSCAN
 def dbscan_clustering(data, eps, min_samples):
@@ -137,13 +131,8 @@ def dbscan_clustering(data, eps, min_samples):
     point_type[core_indices] = "Core"
     point_type[labels == -1] = "Noise"
     
-    # Silhouette Score dan Davies-Bouldin Index
-    sil = silhouette_score(data, labels) if len(set(labels)) > 1 else None
-    dbi = davies_bouldin_score(data, labels) if len(set(labels)) > 1 else None
     
     return {
         "labels": labels,
         "point_type": point_type.tolist(),
-        "silhouette": sil,
-        "dbi": dbi
     }

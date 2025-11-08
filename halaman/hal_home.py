@@ -6,7 +6,15 @@ from modules.konten import judul, string1, string2, string3, cara_penggunaan, qu
 def render_home_page():    
     st.markdown("""
     <style>
-    h1 {text-align: center;}
+    h1 {
+        text-align: center;
+    }
+
+    @media (max-width: 600px) {
+        h1 {
+            font-size: 1.6rem;
+        }
+    }
     </style>
     """, unsafe_allow_html=True)
     st.title(judul)

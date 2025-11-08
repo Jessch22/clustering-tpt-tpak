@@ -65,12 +65,18 @@ def render_metrics_and_silhouette(scores, hasil_data, data_for_clustering):
         dbi_score = scores.get('dbi', None)
         time_sec = scores.get('time_sec', None)
         
-        help_sil = "Semakin tinggi nilai Silhouette, data dalam cluster semakin sesuai dengan tempatnya, artinya cluster lumayan benar."
+        help_sil = """
+        Nilai silhouette (SC: Silhouette Coefficient) menunjukkan keberadaan struktur di cluster.
+        - SC ≥ 0.70: Struktur sangat kuat
+        - 0.50 ≤ SC < 0.70: Struktur menengah
+        - 0.25 ≤ SC < 0.50: Struktur lemah
+        - SC < 0.25: Tidak ada struktur yang jelas
+        """
         help_dbi = "Semakin kecil nilai DBI, cluster lebih kompak dan terpisah, menandakan sedikit atau tidak ada tumpang tindih."
-        help_time = "Semakin kecil waktu pemrosesan, clustering selesai lebih cepat."
+        help_time = "Menunjukkan lama waktu eksekusi algoritma clustering."
         
-        met_col1.metric("Silhouette", f"{sil_score:.3f}" if sil_score is not None else "N/A", help=help_sil)
-        met_col2.metric("DBI", f"{dbi_score:.3f}" if dbi_score is not None else "N/A", help=help_dbi)
+        met_col1.metric("Silhouette", f"{sil_score:.4f}" if sil_score is not None else "N/A", help=help_sil)
+        met_col2.metric("DBI", f"{dbi_score:.4f}" if dbi_score is not None else "N/A", help=help_dbi)
         met_col3.metric("Waktu", f"{time_sec:.2f} s" if time_sec is not None else "N/A", help=help_time)
         
     else:
@@ -191,7 +197,7 @@ def create_folium_map(gdf_merged, key_column='WADMKK', tooltip_name_col: str = '
 def render_boxplot(df_hasil, data_for_clustering=None):
     """Membuat dan menampilkan boxplot interaktif menggunakan pd.melt."""
     # Jika df_hasil tidak valid, tampilkan info dan keluar
-    if df_hasil is None or df_hasil.empty: st.info("Data tidak valid."); return
+    if df_hasil is None or df_hasil.empty: st.info("Belum menjalankan clustering."); return
     # Jika kolom 'Cluster' tidak ada, tampilkan peringatan dan keluar
     if 'Cluster' not in df_hasil.columns: st.warning("Kolom 'Cluster' tidak ditemukan."); return
     # Jika tidak ada cluster valid, tampilkan info dan keluar
@@ -291,7 +297,7 @@ def render_boxplot(df_hasil, data_for_clustering=None):
 def render_silhouette_plot(data_for_clustering, hasil_data, scores):
     """Membuat silhouette plot Matplotlib dengan warna konsisten."""
     # Jika data tidak valid, tampilkan info dan keluar
-    if data_for_clustering is None or hasil_data is None or scores is None: st.info("Data tidak valid."); return
+    if data_for_clustering is None or hasil_data is None or scores is None: st.info("Belum menjalankan clustering."); return
     
     # Mengambil label unik
     labels = hasil_data['Cluster']
@@ -301,7 +307,25 @@ def render_silhouette_plot(data_for_clustering, hasil_data, scores):
     n_clusters_valid = len([l for l in unique_labels if l != -1 and pd.notna(l)])
     
     # Jika kurang dari 2 cluster valid, tampilkan peringatan dan keluar
-    if n_clusters_valid < 2: st.warning("Silhouette plot memerlukan minimal 2 cluster valid."); return
+    if n_clusters_valid < 2: 
+        st.warning("Silhouette plot memerlukan minimal 2 cluster valid.")
+        with st.expander("Mengapa Silhouette Plot tidak muncul?"):
+            st.markdown("""
+                Silhouette plot berguna untuk membandingkan seberapa mirip sebuah titik dengan **cluster-nya sendiri** dibandingkan dengan **cluster tetangga terdekat**.
+                Agar perbandingan ini bisa dilakukan, sistem membutuhkan minimal **dua cluster valid** (selain Noise).
+                #### 1. Semua Wilayah Menjadi "Noise" (Label -1)
+                - Arti: Tidak ada wilayah yang cukup padat untuk membentuk cluster.
+                - Penyebab: Nilai **Epsilon** terlalu kecil atau **MinPts** terlalu tinggi.
+
+                #### 2. Semua Wilayah Menjadi 1 Cluster (Label 0)
+                - Arti: Semua wilayah termasuk dalam satu cluster besar tanpa ada yang dianggap Noise.
+                - Penyebab: Nilai **Epsilon** terlalu besar. Semua titik dianggap 'tetangga' satu sama lain.
+
+                #### 3. Hanya Ada 1 Cluster + Noise (Label 0 dan -1)
+                - Arti: Hanya ada satu cluster yang terbentuk, sementara wilayah lainnya dianggap Noise karena terlalu tersebar.
+                - Penyebab: Nilai **Epsilon** dan **MinPts** sudah tepat untuk membentuk satu cluster, tetapi tidak cukup untuk membentuk cluster tambahan.
+                """)
+        return
     
     # Mengambil nilai silhouette rata-rata. Jika tidak ada, tampilkan peringatan dan keluar
     silhouette_avg = scores.get('silhouette')
@@ -342,9 +366,8 @@ def render_silhouette_plot(data_for_clustering, hasil_data, scores):
 def render_scatter_plots(df_hasil, data_for_clustering=None):
     """Membuat pair plot Seaborn dengan warna konsisten."""
     
-    
     # Jika df_hasil tidak valid, tampilkan info dan keluar
-    if df_hasil is None or df_hasil.empty: st.info("Data tidak valid."); return
+    if df_hasil is None or df_hasil.empty: st.info("Belum menjalankan clustering."); return
     # Jika kolom 'Cluster' tidak ada, tampilkan peringatan dan keluar
     if 'Cluster' not in df_hasil.columns: st.warning("Kolom 'Cluster' tidak ditemukan."); return
     # Jika data_for_clustering tidak valid, tampilkan info dan keluar

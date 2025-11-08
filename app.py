@@ -54,3 +54,41 @@ elif page_index == 1:
     render_dataset_page()
 elif page_index == 2:
     render_clustering_page()
+    
+
+
+
+st.sidebar.divider()
+
+with st.sidebar.expander("📖 Glosarium Istilah"):
+    st.markdown("""
+    **TPT (Tingkat Pengangguran Terbuka)**
+    Persentase jumlah pengangguran terhadap total angkatan kerja.
+    
+    **TPAK (Tingkat Partisipasi Angkatan Kerja)**
+    Persentase jumlah angkatan kerja terhadap total penduduk usia kerja.
+    
+    **K-Means**
+    Metode clustering yang membagi data menjadi *K* cluster berdasarkan jarak ke titik pusat (centroid).
+    
+    **DBSCAN**
+    Metode clustering berbasis kepadatan (density). Efektif menemukan cluster dengan bentuk bebas dan mengidentifikasi *noise*.
+    
+    **Epsilon (eps)**
+    Parameter DBSCAN: Jarak maksimum bagi dua titik untuk dianggap bertetangga.
+    
+    **MinPts**
+    Parameter DBSCAN: Jumlah minimum titik dalam radius *Epsilon* agar sebuah titik dianggap sebagai *core point* (inti cluster).
+    
+    **PCA (Principal Component Analysis)**
+    Teknik untuk mengurangi dimensi (fitur) data, biasa digunakan untuk mengatasi "Curse of Dimensionality" di DBSCAN.
+    
+    **Silhouette Score**
+    Metrik evaluasi cluster (skor -1 s.d. 1). Nilai **mendekati 1** berarti cluster padat dan terpisah dengan baik.
+    
+    **DBI (Davies-Bouldin Index)**
+    Metrik evaluasi cluster. Nilai **mendekati 0** (semakin kecil) berarti cluster semakin baik (padat dan terpisah).
+    
+    **Noise / Outlier**
+    Data yang tidak termasuk dalam cluster manapun. Dalam hasil DBSCAN, biasanya ditandai dengan label **-1**.
+    """)
