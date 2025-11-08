@@ -12,3 +12,4 @@ fpdf2
 openpyxl
 streamlit_option_menu
 typing
+kneed

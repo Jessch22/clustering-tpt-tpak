@@ -39,8 +39,8 @@ def run_analysis(var, tahun_pilihan, metode_terpilih, params, path, sheet, logge
         logger.info("Memuat dan Preprocessing Data...")
         df_raw = muat_data(path, sheet)
         if df_raw.empty:
-            logger.warning("Dataset kosong. Pastikan file DATASET.xlsx benar dan memiliki sheet yang dipilih.")
-            st.warning("Dataset kosong. Pastikan file DATASET.xlsx benar dan memiliki sheet yang dipilih.")
+            logger.error("Dataset kosong. Pastikan file DATASET.xlsx benar dan memiliki sheet yang dipilih.")
+            st.error("Dataset kosong. Pastikan file DATASET.xlsx benar dan memiliki sheet yang dipilih.")
             return
         else:
             logger.info("Dataset berhasil dimuat.")
