@@ -5,11 +5,6 @@ import time
 import os
 from modules.data_processing import muat_data, preprocessing_data, kmeans_clustering, dbscan_clustering
 from modules.plot import create_folium_map
-
-import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
-import plotly.express as px
-import re
 from typing import Optional
 import numpy as np
 

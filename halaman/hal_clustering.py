@@ -281,8 +281,16 @@ def render_clustering_page():
         st.container(height=600)
 
     st.divider()
-    st.subheader("SEBARAN DATA (PAIR PLOT SEABORN)", help="Visualisasi pair plot digunakan untuk seberapa baik cluster yang terbentuk dapat memisahkan data berdasarkan variabel yang dipilih. Plot ini menunjukkan sebaran data untuk setiap pasangan variabel, membantu melihat pola yang tumpang tindih antar cluster")
-    st.caption("**Cara Membaca:** Grafik di **Diagonal** (bukit) menunjukkan sebaran *satu variabel saja*. Jika bukit-bukitnya tumpang tindih, artinya variabel itu saja tidak cukup untuk membedakan cluster. Grafik **Scatter Plot** (titik-titik) digunakan untuk melihat apakah gumpalan data (cluster) terpisah dengan jelas saat membandingkan *dua variabel*.")
+    st.subheader(
+        "ANALISIS PEMISAHAN CLUSTER", 
+        help="Visualisasi ini digunakan untuk menganalisis pemisahan cluster secara visual.")
+    st.caption("""
+    **Cara Kerja:** Pilih satu 'Variabel Fokus' untuk melihat plot distribusinya (KDE) dan membandingkan sebarannya (Scatter Plot) terhadap semua variabel lain.
+    
+    **Cara Membaca:**
+    - **Plot Distribusi (KDE):** Menunjukkan tumpang-tindih cluster pada *satu* variabel.
+    - **Plot Hubungan (Scatter):** Menunjukkan seberapa baik *dua* variabel memisahkan gumpalan cluster.
+    """)
     render_scatter_plots(
         st.session_state.get("hasil_data"),
         st.session_state.get("data_for_clustering"),

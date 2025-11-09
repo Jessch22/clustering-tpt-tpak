@@ -3,8 +3,6 @@ import pandas as pd
 from sklearn.cluster import KMeans
 from sklearn.cluster import DBSCAN
 import time
-import matplotlib.pyplot as plt
-import seaborn as sns
 import streamlit as st
 
 # from utils.saveaspdf import generate_pdf_report

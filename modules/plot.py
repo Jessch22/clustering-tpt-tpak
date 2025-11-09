@@ -6,8 +6,8 @@ import pandas as pd
 from sklearn.metrics import silhouette_samples
 import numpy as np
 import folium
-import seaborn as sns
 import matplotlib.colors as mcolors
+import plotly.figure_factory as ff
 
 def get_cluster_color_map(cluster_ids):
     """Mendapatkan peta warna untuk cluster berdasarkan cluster_ids.
@@ -363,70 +363,169 @@ def render_silhouette_plot(data_for_clustering, hasil_data, scores):
         st.image(img_buffer, use_container_width=True); plt.close(fig)
     except Exception as e: st.error(f"Error saat menyimpan gambar: {e}"); plt.close(fig)
 
-def render_scatter_plots(df_hasil, data_for_clustering=None):
-    """Membuat pair plot Seaborn dengan warna konsisten."""
-    
+def render_scatter_plots(df_hasil, data_for_clustering=None):    
     # Jika df_hasil tidak valid, tampilkan info dan keluar
-    if df_hasil is None or df_hasil.empty: st.info("Belum menjalankan clustering."); return
+    if df_hasil is None or df_hasil.empty: 
+        st.info("Belum menjalankan clustering.")
+        return
     # Jika kolom 'Cluster' tidak ada, tampilkan peringatan dan keluar
-    if 'Cluster' not in df_hasil.columns: st.warning("Kolom 'Cluster' tidak ditemukan."); return
+    if 'Cluster' not in df_hasil.columns: 
+        st.warning("Kolom 'Cluster' tidak ditemukan.")
+        return
     # Jika data_for_clustering tidak valid, tampilkan info dan keluar
-    if data_for_clustering is None or data_for_clustering.empty: st.info("Data untuk clustering tidak valid."); return
+    if data_for_clustering is None or data_for_clustering.empty: 
+        st.info("Data untuk clustering tidak valid.")
+        return
     
     # Mendapat variabel untuk ditampilkan
     scatter_vars = data_for_clustering.columns.tolist()
-    if len(scatter_vars) < 2: st.info("Tidak cukup variabel untuk ditampilkan."); return
+    D = len(scatter_vars)
+    
+    if D < 2: 
+        st.info("Pair Plot memerlukan minimal 2 dimensi untuk perbandingan.")
+        return
     
     try:
         # Persiapan data untuk plot
-        # Pilih kolom yang ada di df_hasil
-        cols_to_plot = [col for col in scatter_vars if col in df_hasil.columns] + ['Cluster', 'kab_kota']
-        # Jika kurang dari 3 kolom (2 variabel + Cluster), tampilkan error dan keluar
-        if len(cols_to_plot) < 3: st.error("Tidak cukup kolom untuk ditampilkan."); return
-        # Mengambil data untuk plot
-        plot_data = df_hasil[cols_to_plot].copy()
-        # Hapus baris dengan nilai NaN pada variabel scatter
+        # Ambil semua kolom variabel yang digunakan
+        cols_for_plot_data = [col for col in scatter_vars if col in df_hasil.columns]
+        # Tambahkan kolom esensial untuk hover, pastikan ada
+        for c in ['Cluster', 'kab_kota', 'prov']:
+            if c in df_hasil.columns and c not in cols_for_plot_data:
+                cols_for_plot_data.append(c)
+                
+        plot_data = df_hasil[cols_for_plot_data].copy()
         plot_data.dropna(subset=scatter_vars, inplace=True)
-        # Jika plot_data kosong setelah dropna, tampilkan peringatan dan keluar
-        if plot_data.empty: st.warning("Tidak ada data untuk ditampilkan."); return
-        # Pastikan kolom 'Cluster' bertipe kategori untuk pewarnaan
-        plot_data['Cluster'] = plot_data['Cluster'].astype('category')
-        # Mendapat daftar cluster valid
-        cluster_categories_scatter = sorted([c for c in plot_data['Cluster'].unique() if c != -1 and pd.notna(c)])
         
-        # Memanggil fungsi get_cluster_color_map untuk mendapatkan peta warna
-        color_map_scatter = get_cluster_color_map(cluster_categories_scatter)
-        try:
-            # Membuat palette dictionary untuk Seaborn
-            seaborn_palette = {k: v for k, v in color_map_scatter.items() if k != -1 and k is not None}
-            # Jika ada noise (-1), tambahkan ke palette
-            if -1 in plot_data['Cluster'].cat.categories:
-                seaborn_palette[-1] = color_map_scatter.get(-1, 'lightgrey')
-        except:
-            seaborn_palette = {str(k): v for k, v in color_map_scatter.items() if k != -1 and k is not None}
-            if '-1' in plot_data['Cluster'].cat.categories.astype(str):
-                seaborn_palette['-1'] = color_map_scatter.get(-1, 'lightgrey')
+        if plot_data.empty: 
+            st.warning("Tidak ada data untuk ditampilkan setelah menghapus missing values.")
+            return
         
-        # Set tema Seaborn dan buat pair plot
-        sns.set_theme(style="ticks")
-        pair_plot = sns.pairplot(
-            plot_data, vars=scatter_vars,
-            # pewarnaan berdasarkan cluster
-            hue="Cluster",
-            # diagonal plot jenis KDE
-            diag_kind="kde",
-            # kustom marker dan style
-            plot_kws={'s': 25, 'alpha': 0.8, 'edgecolor': 'w', 'linewidth': 0.5},
-            corner=False,
-            # pewarnaan dengan palette
-            palette=seaborn_palette
+        # Ubah cluster ke string agar Plotly memperlakukannya sebagai kategori
+        plot_data['Cluster_Str'] = plot_data['Cluster'].astype(str)
+        
+        # 1. Dapatkan semua label cluster (string) unik
+        all_cluster_labels_str = plot_data['Cluster_Str'].unique()
+        
+        # 2. Sortir label tersebut secara numerik (agar -1, 0, 1, 2...)
+        cluster_list_sorted_str = sorted(
+            all_cluster_labels_str, 
+            key=lambda x: int(x) if x.lstrip('-').isdigit() else x
         )
-        # Set judul utama dan tampilkan plot
-        pair_plot.fig.suptitle(f"Pair Plot Seaborn ({', '.join(scatter_vars)})", y=1.02)
-        st.pyplot(pair_plot.fig, clear_figure=True)
-        plt.close(pair_plot.fig)
+        
+        # 3. Buat dictionary untuk 'category_orders' yang akan digunakan px.scatter
+        category_orders_dict = {"Cluster_Str": cluster_list_sorted_str}
+        
+        # 4. Dapatkan peta warna (sudah diurutkan dengan benar oleh get_cluster_color_map)
+        cluster_categories_numeric = sorted([c for c in plot_data['Cluster'].unique() if c != -1 and pd.notna(c)])
+        color_map = get_cluster_color_map(cluster_categories_numeric) #
+        color_map_str = {str(k): v for k, v in color_map.items()}
+        
+        # Pastikan noise (-1) juga memiliki warna jika ada
+        if '-1' in cluster_list_sorted_str:
+            color_map_str['-1'] = color_map.get(-1, 'lightgrey')
+        
+        # === 3. Fokus ke Variabel Tertentu ===
+        
+        focal_var = st.selectbox(
+            "Pilih Variabel Fokus (untuk Sumbu Y)",
+            scatter_vars,
+            index=0,
+            key="scatter_focal",
+            help="Pilih satu variabel untuk dilihat perbandingannya dengan semua variabel lain."
+        )
+        if not focal_var:
+            return
+
+        # 4. Plot Diagonal (Distribusi) untuk Variabel Fokus
+        hist_data = []
+        group_labels = []
+        cluster_list_sorted_str = sorted(
+            plot_data['Cluster_Str'].unique(), 
+            key=lambda x: int(x) if x.lstrip('-').isdigit() else x
+        )
+        
+        for cluster_str in cluster_list_sorted_str:
+            data_for_cluster = plot_data[plot_data['Cluster_Str'] == cluster_str][focal_var].dropna()
+            if not data_for_cluster.empty:
+                hist_data.append(data_for_cluster)
+                group_labels.append(f"Cluster {cluster_str}")
+
+        if not hist_data:
+            st.warning(f"Tidak ada data valid untuk plot diagonal {focal_var}")
+        else:
+            colors_for_plot = [color_map_str.get(c_str, 'black') for c_str in cluster_list_sorted_str]
+
+            # PLOT KDE
+            try:
+                fig_diag = ff.create_distplot(
+                    hist_data, 
+                    group_labels, 
+                    colors=colors_for_plot,
+                    show_hist=False,  # Sembunyikan histogram balok
+                    show_rug=False    # Sembunyikan rug plot
+                )
+                
+                for trace in fig_diag.data:
+                    trace.update(fill='tozeroy', opacity=0.5)
+                    
+                fig_diag.data = fig_diag.data[::-1]
+
+                fig_diag.update_layout(
+                    title=f"Distribusi (KDE) untuk {focal_var}", 
+                    legend_title_text='Cluster',
+                    xaxis_title=focal_var,
+                    yaxis_title="Kepadatan (Density)",
+                )
+                st.plotly_chart(fig_diag, use_container_width=True)
+                
+            except Exception as e_kde:
+                st.error(f"Gagal membuat plot KDE: {e_kde}. Fallback ke histogram grup.")
+                fig_diag_fallback = px.histogram(
+                    plot_data, 
+                    x=focal_var,
+                    color="Cluster_Str",
+                    color_discrete_map=color_map_str, 
+                    barmode='group',
+                    category_orders=category_orders_dict
+                )
+                st.plotly_chart(fig_diag_fallback, use_container_width=True)
+
+        # 5. Plot Scatter "Satu-vs-Semua"
+        st.markdown(f"**Hubungan (Scatter Plot) antara {focal_var} dan Variabel Lain**")
+        
+        # Dapatkan semua variabel LAINNYA untuk sumbu X
+        other_vars = [v for v in scatter_vars if v != focal_var]
+        
+        if not other_vars:
+            st.info("Hanya ada 1 dimensi, tidak ada variabel lain untuk dibandingkan.")
+            return
+
+        # Atur layout kolom (misal: 3 plot per baris)
+        cols = st.columns(3) 
+        
+        for i, other_var in enumerate(other_vars):
+            with cols[i % 3]: # Ini akan memutar (0, 1, 2, 0, 1, 2, ...)
+                fig_single = px.scatter(
+                    plot_data,
+                    x=other_var,    # Variabel lain di Sumbu X
+                    y=focal_var,    # Variabel Fokus di Sumbu Y
+                    color="Cluster_Str",
+                    color_discrete_map=color_map_str,
+                    hover_data=['kab_kota', 'prov', 'Cluster'], # Hover interaktif
+                    title=f"{focal_var} vs {other_var}",
+                    category_orders=category_orders_dict
+                )
+                # Perkecil judul agar muat
+                fig_single.update_layout(
+                    title_font_size=12, 
+                    height=350,
+                )
+                st.plotly_chart(fig_single, use_container_width=True)
+
     except Exception as e:
-        st.error(f"Gagal membuat Seaborn pair plot: {e}")
+        st.error(f"Gagal membuat pair plot: {e}")
+        st.exception(e)
 
 # ============================================================
 # FUNGSI UNTUK RENDER KE BUFFER (UNTUK PDF)
