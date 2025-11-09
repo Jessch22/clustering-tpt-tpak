@@ -179,7 +179,7 @@ def render_clustering_page():
             st.markdown("MinPts (Jumlah minimum titik dalam radius Epsilon untuk membentuk sebuah cluster)")
             minpts_value = st.slider(
                 "MinPts",
-                3,
+                2,
                 20,
                 step=1,
                 key="minpts_value",
