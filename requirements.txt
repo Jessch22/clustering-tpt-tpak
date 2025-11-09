@@ -4,6 +4,7 @@ numpy
 scikit-learn
 plotly
 folium
+streamlit-folium
 geopandas
 matplotlib
 streamlit_option_menu
