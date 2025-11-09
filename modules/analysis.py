@@ -141,7 +141,7 @@ def run_analysis(var, tahun_pilihan, metode_terpilih, params, path, sheet, logge
                 
             if optimal_dbscan:
                 logger.info("Mencari parameter optimal...")                
-                minpts = max(3, D_final + 1)
+                minpts = max(2, D_final + 1)
                 logger.info(f"Dimensi final: {D_final}. MinPts diatur ke max(3, D_final+1) = {minpts}")
                 
                 nn = NearestNeighbors(n_neighbors=minpts, metric='manhattan') 
