@@ -164,7 +164,7 @@ def run_analysis(var, tahun_pilihan, metode_terpilih, params, path, sheet, logge
                     eps = 0.5
                     
                 SLIDER_MIN = 0.1
-                SLIDER_MAX = 30.0
+                SLIDER_MAX = 25.0
                 SLIDER_STEP = 0.1
                 
                 eps_rounded = np.round(eps / SLIDER_STEP) * SLIDER_STEP

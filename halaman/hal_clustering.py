@@ -169,7 +169,7 @@ def render_clustering_page():
             eps_value = st.slider(
                 "Epsilon",
                 0.1,
-                30.0,
+                25.0,
                 step=0.1,
                 key="eps_value",
                 value=st.session_state.get("eps_value", 0.5),
