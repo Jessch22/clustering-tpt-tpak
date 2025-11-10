@@ -8,9 +8,11 @@ import numpy as np
 
 from modules.analysis import run_analysis
 from modules.plot import (
+    render_kmeans_helpers,
     render_metrics_and_silhouette,
     render_boxplot,
     render_scatter_plots,
+    render_dbscan_helpers,
 )
 from utils.saveaspdf import generate_pdf_report
 
@@ -238,7 +240,23 @@ def render_clustering_page():
             st.session_state.get("data_for_clustering"),
         )
 
-    st.divider()
+    metode_terpilih = st.session_state.get("metode_pilihan", "K-Means")
+    if metode_terpilih == "DBSCAN":
+        render_dbscan_helpers(
+            st.session_state.get("dbscan_elbow_data"),
+            st.session_state.get("dbscan_elbow_minpts"),
+            st.session_state.get("dbscan_minpts_plot_data"),
+            st.session_state.get("dbscan_elbow_knee")
+        )
+        st.divider()
+        
+    elif metode_terpilih == "K-Means":
+        render_kmeans_helpers(
+            st.session_state.get("kmeans_k_search_data")
+        )
+        # Tambahkan divider hanya jika tabelnya benar-benar ditampilkan
+        if st.session_state.get("kmeans_k_search_data") is not None:
+            st.divider()
     st.subheader("JUMLAH WILAYAH PER CLUSTER", help="Tabel ini menunjukkan jumlah wilayah yang termasuk dalam setiap cluster hasil clustering.")
     if st.session_state.get("hasil_data") is not None:
         hasil_df = st.session_state["hasil_data"]
@@ -364,7 +382,9 @@ def render_clustering_page():
 
         with col_dl_2:
             if st.button("❌ Hapus Hasil Sekarang", use_container_width=True):
+                # HANYA HAPUS KEY HASIL, BUKAN KEY WIDGET
                 keys_to_clear = [
+                    # Data Hasil Utama
                     "hasil_data",
                     "scores",
                     "data_for_clustering",
@@ -372,16 +392,18 @@ def render_clustering_page():
                     "map_object",
                     "var",
                     "params",
-                    "optimal_k",
-                    "optimal_dbscan",
-                    "k_value",
-                    "eps_value",
-                    "minpts_value"
+                    
+                    "dbscan_elbow_data",
+                    "dbscan_elbow_minpts",
+                    "dbscan_minpts_plot_data",
+                    "dbscan_elbow_knee",
+                    "kmeans_k_search_data"
                 ]
                 for key in keys_to_clear:
                     if key in st.session_state:
                         st.session_state[key] = None
-                st.success("Hasil saat ini dihapus.")
+                
+                st.success("Hasil analisis saat ini telah dihapus.")
                 st.rerun()
     else:
         st.info("Belum ada hasil clustering...")

@@ -8,6 +8,7 @@ import numpy as np
 import folium
 import matplotlib.colors as mcolors
 import plotly.figure_factory as ff
+import plotly.graph_objects as go
 
 def get_cluster_color_map(cluster_ids):
     """Mendapatkan peta warna untuk cluster berdasarkan cluster_ids.
@@ -570,3 +571,114 @@ def render_static_map_to_buffer(gdf_to_plot):
         st.error(f"[PDF] Error rendering peta statis ke buffer: {e}")
         if fig is not None and plt.fignum_exists(fig.number): plt.close(fig)
         return None
+
+def render_kmeans_helpers(k_search_data):
+    """
+    Render tabel justifikasi pencarian K-Optimal untuk K-Means.
+    """
+    if k_search_data is None or k_search_data.empty:
+        return
+
+    st.subheader("PENCARIAN K-OPTIMAL (K-MEANS)", help="Tabel ini menunjukkan hasil Skor Silhouette untuk setiap nilai K yang diuji. Sistem memilih K dengan skor tertinggi.")
+    
+    try:
+        df_display = k_search_data.copy()
+        
+        best_k_index = df_display['Silhouette'].idxmax()
+        
+        def style_row(row):
+            styles = [''] * len(row)
+            if row.name == best_k_index:
+                styles = ['background-color: #e0f7fa; font-weight: bold;'] * len(row) # Sorot baris terbaik
+            return styles
+
+        df_display['Silhouette'] = df_display['Silhouette'].apply(lambda x: f"{x:.4f}" if x != -1 else "N/A (Gagal)")
+        
+        st.dataframe(
+            df_display.style.apply(style_row, axis=1), 
+            use_container_width=True
+        )
+
+    except Exception as e:
+        st.error(f"Gagal render tabel K-Optimal: {e}")
+        st.dataframe(k_search_data, use_container_width=True)
+
+def render_dbscan_helpers(elbow_data, elbow_minpts, minpts_plot_data, elbow_knee):
+    """
+    Render K-distance (Elbow) plot dan Sil vs MinPts plot untuk DBSCAN.
+    """
+    
+    if elbow_data is None or minpts_plot_data is None:
+        return
+    
+    st.divider()
+
+    st.subheader("ELBOW & MINPTS PLOT (DBSCAN)", help="Visualisasi ini membantu dalam menentukan parameter DBSCAN yang optimal, yaitu Epsilon dan MinPts. Plot K-distance (Elbow) digunakan untuk memilih nilai Epsilon, sedangkan plot Silhouette vs MinPts membantu dalam memilih nilai MinPts yang sesuai.")
+    col1, col2 = st.columns(2)
+
+    with col1:
+        try:
+            # --- 1. Elbow Plot (K-distance) ---
+            fig_elbow = go.Figure()
+            fig_elbow.add_trace(go.Scatter(
+                x=np.arange(len(elbow_data)),
+                y=elbow_data,
+                mode='lines',
+                name=f'k-distance (k={elbow_minpts})'
+            ))
+            
+            # Tambahkan garis siku jika ditemukan
+            if elbow_knee and elbow_knee[0] is not None and elbow_knee[1] is not None:
+                knee_x, knee_y = elbow_knee
+                if knee_y > 0:
+                    fig_elbow.add_vline(x=knee_x, line_dash="dash", line_color="red")
+                    fig_elbow.add_hline(y=knee_y, line_dash="dash", line_color="red")
+                    fig_elbow.add_annotation(x=knee_x, y=knee_y, text=f"Siku (Eps) ≈ {knee_y:.2f}", showarrow=True, arrowhead=1, ay=-30)
+
+            fig_elbow.update_layout(
+                title=f"Plot Siku (K-Distance) untuk MinPts={elbow_minpts}",
+                xaxis_title="Titik (diurutkan berdasarkan jarak)",
+                yaxis_title=f"Jarak Tetangga ke-{elbow_minpts} (Epsilon)",
+                height=400
+            )
+            st.plotly_chart(fig_elbow, use_container_width=True)
+        except Exception as e:
+            st.error(f"Gagal render Elbow Plot: {e}")
+
+    with col2:
+        try:
+            # --- 2. Silhouette vs MinPts Plot ---
+            fig_minpts = go.Figure()
+            fig_minpts.add_trace(go.Scatter(
+                x=minpts_plot_data['MinPts'],
+                y=minpts_plot_data['Silhouette'],
+                mode='lines+markers',
+                text=minpts_plot_data.apply(lambda row: f"Eps: {row['Eps_Found']:.2f}", axis=1),
+                hovertemplate='MinPts: %{x}<br>Silhouette: %{y:.4f}<br>Eps terkait: %{text}'
+            ))
+            
+            # Tandai skor terbaik
+            if not minpts_plot_data.empty:
+                best_idx = minpts_plot_data['Silhouette'].idxmax()
+                best_row = minpts_plot_data.loc[best_idx]
+                
+                fig_minpts.add_vline(x=best_row['MinPts'], line_dash="dash", line_color="green")
+                fig_minpts.add_annotation(
+                    x=best_row['MinPts'], 
+                    y=best_row['Silhouette'], 
+                    text=f"Terbaik: {best_row['Silhouette']:.4f} (MinPts={best_row['MinPts']})",
+                    showarrow=True,
+                    arrowhead=1,
+                    ay=-30 # offset anotasi
+                )
+
+            fig_minpts.update_layout(
+                title="Skor Silhouette vs. MinPts (Rentang: D+1 s.d. 20)",
+                xaxis_title="MinPts",
+                yaxis_title="Silhouette Score",
+                height=400,
+                xaxis=dict(tickmode='linear', dtick=1)
+            )
+            st.plotly_chart(fig_minpts, use_container_width=True)
+        except Exception as e:
+            st.error(f"Gagal render MinPts Plot: {e}")

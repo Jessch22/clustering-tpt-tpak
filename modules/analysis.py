@@ -25,6 +25,13 @@ def run_analysis(var, tahun_pilihan, metode_terpilih, params, path, sheet, logge
     st.session_state['map_object'] = None
     st.session_state['cluster_color_map'] = None
     
+    st.session_state['dbscan_elbow_data'] = None
+    st.session_state['dbscan_elbow_minpts'] = None
+    st.session_state['dbscan_minpts_plot_data'] = None
+    st.session_state['dbscan_elbow_knee'] = (None, None)
+    
+    st.session_state['kmeans_k_search_data'] = None
+    
     st.session_state['var'] = var
 
     start_proc = time.perf_counter()
@@ -90,27 +97,43 @@ def run_analysis(var, tahun_pilihan, metode_terpilih, params, path, sheet, logge
                 best_score = -1
                 k_range = range(2, 7)
                 
+                k_results_list = []
+                sil_results_list = []
+                
                 for k_test in k_range:
                     temp_result = kmeans_clustering(data_to_cluster, k_test)
                     temp_labels = temp_result.get('labels')
+                    temp_sil = -1
                     if temp_labels is not None and len(np.unique(temp_labels)) > 1:
                         temp_sil = silhouette_score(data_to_cluster, temp_labels) 
                         if temp_sil > best_score:
                             best_score = temp_sil
                             best_k = k_test
+                    
+                    k_results_list.append(k_test)
+                    sil_results_list.append(temp_sil)
                             
                 k = best_k
                 params['k'] = k
                 st.info(f"K optimal ditemukan: {k} (Silhouette: {best_score:.4f})")
                 logger.info(f"K optimal ditemukan: {k} (Silhouette: {best_score:.4f})")
+                
+                df_k_search = pd.DataFrame({
+                    'Jumlah K': k_results_list,
+                    'Silhouette': sil_results_list
+                })
+                st.session_state['kmeans_k_search_data'] = df_k_search
+                
             else:
                 k = params.get('k', 2)
+                st.session_state['kmeans_k_search_data'] = None
             
             hasil_cluster = kmeans_clustering(data_to_cluster, k)
             labels = hasil_cluster.get('labels')
                     
         elif metode_terpilih == "DBSCAN":
             logger.info("Menjalankan DBSCAN...")
+            st.session_state['kmeans_k_search_data'] = None
             optimal_dbscan = params.get('optimal_dbscan', False)
             use_pca_manual = params.get('use_pca_manual', False)
             
@@ -139,58 +162,128 @@ def run_analysis(var, tahun_pilihan, metode_terpilih, params, path, sheet, logge
                 D_final = n_components_pca
                 pca_applied = True
                 
+            final_eps = 0.5
+            final_minpts = D_final + 1
+            
             if optimal_dbscan:
-                logger.info("Mencari parameter optimal...")                
-                minpts = max(2, D_final + 1)
-                logger.info(f"Dimensi final: {D_final}. MinPts diatur ke max(3, D_final+1) = {minpts}")
+                logger.info("Mode Optimal: Menjalankan pencarian Silhouette vs. MinPts...")
                 
-                nn = NearestNeighbors(n_neighbors=minpts, metric='manhattan') 
-                nn.fit(data_to_cluster)
-                distances, indices = nn.kneighbors(data_to_cluster)
-                k_distances = np.sort(distances[:, -1], axis=0)
+                # Pencarian Silhouette vs MinPts
+                search_start = D_final + 1
+                search_end = 21
+                if search_start >= search_end:
+                    logger.warning(f"Nilai D+1 ({search_start}) lebih besar dari batas (20). Pencarian MinPts dibatasi.")
+                    search_end = search_start + 1 
                 
-                x = np.arange(len(k_distances))
-                y = k_distances
+                min_pts_search_range = range(search_start, search_end)
+                logger.info(f"Mencari Sil vs MinPts (Range: {list(min_pts_search_range)})...")
                 
-                eps = 0.5
-                try:
-                    kneedle = KneeLocator(x, y, curve='convex', direction='increasing', S=1.0)
-                    eps = kneedle.elbow_y
-                    if eps is None or eps <= 0:
-                        logger.warning(f"Kneed gagal (eps={eps}). Fallback ke 0.5")
-                        eps = 0.5
-                except Exception as e_kneed:
-                    logger.warning(f"Error Kneed: {e_kneed}. Fallback ke 0.5")
-                    eps = 0.5
+                sil_scores_for_minpts = []
+                eps_values_for_minpts = []
+                x_range_for_knee = np.arange(len(data_to_cluster))
+                
+                for mp_test in min_pts_search_range:
+                    nn_mp = NearestNeighbors(n_neighbors=mp_test, metric='manhattan')
+                    nn_mp.fit(data_to_cluster)
+                    distances_mp, _ = nn_mp.kneighbors(data_to_cluster)
+                    k_distances_mp = np.sort(distances_mp[:, -1], axis=0)
                     
-                SLIDER_MIN = 0.1
-                SLIDER_MAX = 25.0
-                SLIDER_STEP = 0.1
+                    eps_mp = 0.5 # fallback
+                    try:
+                        kneedle_mp = KneeLocator(x_range_for_knee, k_distances_mp, curve='convex', direction='increasing', S=1.0)
+                        eps_mp = kneedle_mp.elbow_y
+                        if eps_mp is None or eps_mp <= 0: eps_mp = 0.5
+                    except Exception:
+                        eps_mp = 0.5
+                        
+                    dbscan_mp = dbscan_clustering(data_to_cluster, eps_mp, mp_test)
+                    labels_mp = dbscan_mp.get('labels')
+                    
+                    score_mp = -1 
+                    if labels_mp is not None and len(np.unique(labels_mp)) > 1:
+                        score_mp = silhouette_score(data_to_cluster, labels_mp)
+                        
+                    sil_scores_for_minpts.append(score_mp)
+                    eps_values_for_minpts.append(eps_mp)
+                    
+                logger.info(f"Hasil Sil vs MinPts: {sil_scores_for_minpts}")
                 
-                eps_rounded = np.round(eps / SLIDER_STEP) * SLIDER_STEP
-                eps_final = np.clip(eps_rounded, SLIDER_MIN, SLIDER_MAX)
+                df_sil_results = pd.DataFrame({
+                    'MinPts': list(min_pts_search_range),
+                    'Silhouette': sil_scores_for_minpts,
+                    'Eps_Found': eps_values_for_minpts
+                })
+                st.session_state['dbscan_minpts_plot_data'] = df_sil_results
                 
-                eps = eps_final
+                # Menentukan parameter akhir berdasarkan hasil pencarian
+                if not df_sil_results.empty and df_sil_results['Silhouette'].max() > -1:
+                    best_idx = df_sil_results['Silhouette'].idxmax()
+                    best_row = df_sil_results.loc[best_idx]
+                    
+                    final_minpts = int(best_row['MinPts'])
+                    final_eps = float(best_row['Eps_Found'])
+                    
+                    st.success(f"Optimal: Epsilon={final_eps:.2f}, MinPts={final_minpts} (Sil={best_row['Silhouette']:.4f})")
+                    logger.success(f"Optimal: Epsilon={final_eps:.2f}, MinPts={final_minpts} (Sil={best_row['Silhouette']:.4f})")
                 
-                st.success(f"Epsilon optimal: {eps:.2f}, MinPts: {minpts}")
-                logger.success(f"Epsilon optimal: {eps:.2f}, MinPts: {minpts}")
+                else:
+                    logger.warning("Pencarian Sil vs MinPts gagal, fallback ke D+1.")
+                    final_minpts = max(2, D_final + 1)
+                    # Coba cari Epsilon untuk D+1 (fallback)
+                    nn_fallback = NearestNeighbors(n_neighbors=final_minpts, metric='manhattan').fit(data_to_cluster)
+                    dist_fallback, _ = nn_fallback.kneighbors(data_to_cluster)
+                    k_dist_fallback = np.sort(dist_fallback[:, -1], axis=0)
+                    try:
+                        kneedle_fb = KneeLocator(x_range_for_knee, k_dist_fallback, curve='convex', direction='increasing', S=1.0)
+                        final_eps = kneedle_fb.elbow_y
+                        if final_eps is None or final_eps <= 0: final_eps = 0.5
+                    except Exception:
+                        final_eps = 0.5
+                    st.warning(f"Fallback: Epsilon={final_eps:.2f}, MinPts={final_minpts}")
 
-                # Simpan params optimal
-                params['eps'] = eps
-                params['minpts'] = minpts
-                
+                params['eps'] = final_eps
+                params['minpts'] = final_minpts
+
             else:
-                # Ambil dari slider
-                eps = params.get('eps', 0.5)
-                minpts = params.get('minpts', 5)
-                logger.info(f"Parameter: MinPts = {minpts}, Epsilon = {eps}")
+                # Mode Manual: Ambil dari slider
+                logger.info("Mode Manual: Menggunakan parameter dari slider.")
+                final_eps = params.get('eps', 0.5)
+                final_minpts = params.get('minpts', 5)
+                logger.info(f"Parameter manual: MinPts = {final_minpts}, Epsilon = {final_eps}")
                 
-            # Panggil clustering dengan params final
-            # data_to_cluster bisa jadi data asli atau data PCA
-            hasil_cluster = dbscan_clustering(data_to_cluster, eps, minpts) 
+                # Kosongkan plot siluet jika manual
+                st.session_state['dbscan_minpts_plot_data'] = None 
+
+
+            # --- 2. Elbow Plot (K-distance)
+            
+            logger.info(f"Membuat Elbow Plot data (menggunakan MinPts={final_minpts})...")
+            
+            nn_elbow = NearestNeighbors(n_neighbors=final_minpts, metric='manhattan')
+            nn_elbow.fit(data_to_cluster)
+            distances_elbow, _ = nn_elbow.kneighbors(data_to_cluster)
+            k_distances_plot_data = np.sort(distances_elbow[:, -1], axis=0)
+            
+            st.session_state['dbscan_elbow_data'] = k_distances_plot_data
+            st.session_state['dbscan_elbow_minpts'] = final_minpts
+            
+            try:
+                x_elbow_plot = np.arange(len(k_distances_plot_data))
+                kneedle_elbow = KneeLocator(x_elbow_plot, k_distances_plot_data, curve='convex', direction='increasing', S=1.0)
+                st.session_state['dbscan_elbow_knee'] = (kneedle_elbow.elbow, kneedle_elbow.elbow_y)
+                
+                if optimal_dbscan:
+                    logger.info(f"Verifikasi Siku: Eps dari plot (={kneedle_elbow.elbow_y:.2f}) vs Eps terpilih (={final_eps:.2f})")
+                    
+            except Exception:
+                st.session_state['dbscan_elbow_knee'] = (None, None)
+                
+            logger.info(f"Menjalankan Clustering DBSCAN final dengan Eps={final_eps}, MinPts={final_minpts}")
+            hasil_cluster = dbscan_clustering(data_to_cluster, final_eps, final_minpts) 
             labels = hasil_cluster.get('labels')
             point_type = hasil_cluster.get('point_type', None)
-
+                
+            
         else:
             st.error("Metode clustering tidak dikenali.")
             logger.error("Metode clustering tidak dikenali")
@@ -198,7 +291,8 @@ def run_analysis(var, tahun_pilihan, metode_terpilih, params, path, sheet, logge
             
         logger.info("Menghitung skor evaluasi...")
         if labels is not None and len(np.unique(labels)) > 1:
-            sil_score = silhouette_score(data_for_clustering, labels)
+            # Gunakan data_for_clustering (data asli non-PCA) untuk skor akhir
+            sil_score = silhouette_score(data_for_clustering, labels) 
             dbi_score = davies_bouldin_score(data_for_clustering, labels)
             logger.info(f"Skor: Sil = {sil_score:.4f}, DBI = {dbi_score:.4f}")
         else:

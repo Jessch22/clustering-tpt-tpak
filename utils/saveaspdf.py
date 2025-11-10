@@ -369,9 +369,18 @@ def generate_pdf_report():
         sil = scores.get("silhouette")
         dbi = scores.get("dbi")
         time_val = scores.get("time_sec")
+        
+        if sil > 0.7:
+            interpretasiS = "Struktur Kuat"
+        elif sil > 0.5:
+            interpretasiS = "Struktur Sedang"
+        elif sil > 0.25:
+            interpretasiS = "Struktur Lemah"
+        else:
+            interpretasiS = "Tidak ada Struktur"
         metric_text = (
             f"Silhouette Score: {sil:.4f}\n"
-            f"   - Interpretasi: {'Baik' if sil > 0.5 else 'Cukup' if sil > 0.25 else 'Kurang Baik'}\n\n"
+            f"   - Interpretasi: {interpretasiS}\n\n"
             f"Davies-Bouldin Index: {dbi:.4f}\n"
             f"   - Interpretasi: {'Baik' if dbi < 1.0 else 'Cukup' if dbi < 2.0 else 'Kurang Baik'}\n\n"
             f"Waktu Komputasi: {time_val:.2f} detik\n"
