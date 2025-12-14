@@ -290,15 +290,22 @@ def run_analysis(var, tahun_pilihan, metode_terpilih, params, path, sheet, logge
             return
             
         logger.info("Menghitung skor evaluasi...")
-        if labels is not None and len(np.unique(labels)) > 1:
-            # Gunakan data_for_clustering (data asli non-PCA) untuk skor akhir
-            sil_score = silhouette_score(data_for_clustering, labels) 
-            dbi_score = davies_bouldin_score(data_for_clustering, labels)
-            logger.info(f"Skor: Sil = {sil_score:.4f}, DBI = {dbi_score:.4f}")
+        
+        valid_mask = labels != -1
+        valid_labels = labels[valid_mask]
+        valid_data = data_for_clustering[valid_mask]
+        
+        if len(np.unique(valid_labels)) > 1:
+            sil_score = silhouette_score(valid_data, valid_labels) 
+            dbi_score = davies_bouldin_score(valid_data, valid_labels)
+            logger.info(f"Skor (Valid Only): Sil = {sil_score:.4f}, DBI = {dbi_score:.4f}")
         else:
             sil_score = None
             dbi_score = None
-            logger.warning("Skor tidak dihitung (kurang dari 2 cluster).")
+            if len(np.unique(labels)) > 1:
+                logger.warning("Skor tidak dihitung: Hanya ada 1 cluster valid (sisanya noise).")
+            else:
+                logger.warning("Skor tidak dihitung: Kurang dari 2 cluster.")
             
         # ============== 4. Buat Tabel Hasil Akhir ===============
         logger.info("Membuat tabel hasil dan visualisasi...")
