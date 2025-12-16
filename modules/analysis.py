@@ -154,11 +154,21 @@ def run_analysis(var, tahun_pilihan, metode_terpilih, params, path, sheet, logge
                 logger.info(f"Dimensi asli ({D}) < 3. PCA tidak diterapkan.")
             
             if run_pca:
-                n_components_pca = 3 if D > 3 else 2 
-                pca = PCA(n_components=n_components_pca)
+                target_variance = 0.95 
+                pca = PCA(n_components=target_variance)
+                
                 data_pca = pca.fit_transform(data_to_cluster)
-                logger.info(f"Data ditransformasi ke {n_components_pca} komponen utama.")
-                data_to_cluster = pd.DataFrame(data_pca, index=data_for_clustering.index, columns=[f"PC{i+1}" for i in range(n_components_pca)])
+                
+                n_components_pca = pca.n_components_ 
+                
+                logger.info(f"PCA mempertahankan {target_variance*100}% informasi. Terbentuk {n_components_pca} komponen.")
+                
+                data_to_cluster = pd.DataFrame(
+                    data_pca, 
+                    index=data_for_clustering.index, 
+                    columns=[f"PC{i+1}" for i in range(n_components_pca)]
+                )
+                
                 D_final = n_components_pca
                 pca_applied = True
                 
@@ -200,9 +210,16 @@ def run_analysis(var, tahun_pilihan, metode_terpilih, params, path, sheet, logge
                     labels_mp = dbscan_mp.get('labels')
                     
                     score_mp = -1 
-                    if labels_mp is not None and len(np.unique(labels_mp)) > 1:
-                        score_mp = silhouette_score(data_to_cluster, labels_mp)
+                    if labels_mp is not None:
+                        valid_mask = labels_mp != -1
+                        valid_labels = labels_mp[valid_mask]
+                        valid_data = data_to_cluster[valid_mask]
                         
+                        if len(np.unique(valid_labels)) > 1:
+                            score_mp = silhouette_score(valid_data, valid_labels)
+                        else:
+                            score_mp = -1 
+                    
                     sil_scores_for_minpts.append(score_mp)
                     eps_values_for_minpts.append(eps_mp)
                     
