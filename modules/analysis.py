@@ -58,10 +58,10 @@ def run_analysis(var, tahun_pilihan, metode_terpilih, params, path, sheet, logge
 
         identity_cols = df_raw[['prov', 'kab_kota']].copy()
 
-        # Preprocessing: menghasilkan data_clean, data_norm, data_splits, dsb.
+        # Preprocessing
         datacol_num, data_replace, data_clean, data_norm, data_splits = preprocessing_data(df_raw)
 
-        # ============ 2. Pilih data untuk clustering ============
+        # 2. Pilih data untuk clustering
         start_year = tahun_pilihan[0]
         end_year = tahun_pilihan[1]
         nama_data = f"{var}_{start_year}" if start_year == end_year else f"{var}_{start_year}_{end_year}"
@@ -85,7 +85,6 @@ def run_analysis(var, tahun_pilihan, metode_terpilih, params, path, sheet, logge
         point_type = None
         sil_score = None
         dbi_score = None
-
     
         if metode_terpilih == "K-Means":
             logger.info("Menjalankan K-Means...")
@@ -138,7 +137,7 @@ def run_analysis(var, tahun_pilihan, metode_terpilih, params, path, sheet, logge
             use_pca_manual = params.get('use_pca_manual', False)
             
             D_final = D
-            data_to_cluster = data_for_clustering.copy() # Mulai dengan data asli
+            data_to_cluster = data_for_clustering.copy()
             pca_applied = False
             
             run_pca = False
@@ -272,7 +271,7 @@ def run_analysis(var, tahun_pilihan, metode_terpilih, params, path, sheet, logge
                 st.session_state['dbscan_minpts_plot_data'] = None 
 
 
-            # --- 2. Elbow Plot (K-distance)
+            # 2. Elbow Plot (K-distance)
             
             logger.info(f"Membuat Elbow Plot data (menggunakan MinPts={final_minpts})...")
             
@@ -324,7 +323,7 @@ def run_analysis(var, tahun_pilihan, metode_terpilih, params, path, sheet, logge
             else:
                 logger.warning("Skor tidak dihitung: Kurang dari 2 cluster.")
             
-        # ============== 4. Buat Tabel Hasil Akhir ===============
+        # 4. Tabel Hasil Akhir
         logger.info("Membuat tabel hasil dan visualisasi...")
         if labels is not None and data_clean.shape[0] == len(labels):
             df_output_temp = pd.concat([identity_cols.reset_index(drop=True), data_clean.reset_index(drop=True)], axis=1)
