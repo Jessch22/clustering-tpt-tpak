@@ -11,48 +11,21 @@ import plotly.figure_factory as ff
 import plotly.graph_objects as go
 
 def get_cluster_color_map(cluster_ids):
-    """Mendapatkan peta warna untuk cluster berdasarkan cluster_ids.
-
-    - cluster_ids: iterable berisi id cluster (bisa int atau str). Noise harus diberi id -1.
-    - Warna abu-abu (#D3D3D3) DILARANG untuk cluster valid; hanya dipakai untuk noise (-1).
-    - Fungsi mengembalikan dict: {cluster_id: hexcolor, ..., -1: '#D3D3D3'}.
-    """
     color_map = {}
 
     # Filter cluster_ids valid (bukan NaN atau -1)
     valid_cluster_ids = sorted([c for c in cluster_ids if pd.notna(c) and c != -1], key=lambda x: (int(x) if str(x).lstrip('-').isdigit() else str(x)))
-    n_colors = len(valid_cluster_ids)
-
-    # Ambil colormap 'tab10' dari Matplotlib sebagai preferensi
-    try:
-        cmap = plt.colormaps.get('tab10')
-        if n_colors > 0:
-            for i, cluster_id in enumerate(valid_cluster_ids):
-                # normalisasi indeks warna ke [0,1]
-                norm_index = float(i) / (n_colors - 1) if n_colors > 1 else 0.5
-                rgba_color = cmap(norm_index)
-                hex_color = mcolors.to_hex(rgba_color)
-                # Pastikan warna tidak sama dengan gray noise '#D3D3D3'
-                if hex_color.lower() in ('#d3d3d3', '#d3d3d'):  # defensif check
-                    # fallback ke warna lain dari plotly
-                    hex_color = px.colors.qualitative.Plotly[i % len(px.colors.qualitative.Plotly)]
-                color_map[cluster_id] = hex_color
-    except Exception as e:
-        st.warning(f"Gagal mendapatkan colormap Matplotlib ('tab10') ({e}), fallback ke Plotly.")
-        plotly_colors = px.colors.qualitative.Plotly
-        for i, cluster_id in enumerate(valid_cluster_ids):
-            color_map[cluster_id] = plotly_colors[i % len(plotly_colors)]
-
-    # Pastikan semua cluster valid memiliki warna (fallback bila ada edge cases)
-    if valid_cluster_ids:
-        fallback_palette = px.colors.qualitative.Plotly
-        for i, cluster_id in enumerate(valid_cluster_ids):
-            if cluster_id not in color_map or not color_map[cluster_id]:
-                color_map[cluster_id] = fallback_palette[i % len(fallback_palette)]
-
-    # Warna khusus untuk noise (-1) — harus abu-abu
-    color_map[-1] = '#D3D3D3'
-
+    distinct_colors = [
+        '#1f77b4','#ff7f0e','#2ca02c','#d62728',
+        '#9467bd','#8c564b','#e377c2','#bcbd22', '#17becf',
+        '#e31a1c', '#fdbf6f', '#ff9a9a', '#b2df8a', '#33a02c', '#fb9a99'
+    ]
+    
+    for i, cluster_id in enumerate(valid_cluster_ids):
+        hex_color = distinct_colors[i % len(distinct_colors)]
+        color_map[cluster_id] = hex_color
+        
+    color_map[-1] = "#5E5E5E"
     return color_map
 
 def render_metrics_and_silhouette(scores, hasil_data, data_for_clustering):
