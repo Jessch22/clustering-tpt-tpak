@@ -39,7 +39,7 @@ def del_col_non_numeric(data):
 # Mengganti non-numeric dengan NaN
 def replace_non_numeric(data):
   data_replaced = data.replace({None: np.nan, '-': np.nan})
-  data_num = data.replace({None: np.nan, '-': np.nan})
+  data_num = data_replaced.apply(pd.to_numeric, errors='coerce')
   return data_num
 
 # Mengisi missing value
